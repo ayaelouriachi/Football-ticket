@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="200" version="1.1" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+ <rect width="200" height="200" fill="#f0f0f0"/>
+ <g fill="#999">
+  <path d="m40 80h120v60h-120z"/>
+  <path d="m30 70h140v10h-140z"/>
+  <path d="m50 140h100v10h-100z"/>
+ </g>
+ <g fill="#666">
+  <rect x="60" y="90" width="10" height="40"/>
+  <rect x="90" y="90" width="10" height="40"/>
+  <rect x="120" y="90" width="10" height="40"/>
+ </g>
+ <text x="100" y="170" fill="#666" font-family="Arial" font-size="14" text-anchor="middle">Stadium Image</text>
+</svg> 

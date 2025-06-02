@@ -1,0 +1,30 @@
+# Sécurité
+Options -Indexes
+ServerSignature Off
+
+# Réécriture d'URL
+RewriteEngine On
+
+# Redirection HTTPS (à activer en production)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# URLs conviviales
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^match/([0-9]+)/?$ pages/match-details.php?id=$1 [L,QSA]
+
+# Protection des dossiers sensibles
+RedirectMatch 403 ^/config/
+RedirectMatch 403 ^/classes/
+RedirectMatch 403 ^/vendor/
+
+# Cache des ressources statiques
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+</IfModule>

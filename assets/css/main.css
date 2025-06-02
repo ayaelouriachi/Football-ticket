@@ -1,0 +1,160 @@
+/* Error and Success Messages */
+.error-message,
+.success-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    border-radius: 5px;
+    color: white;
+    font-weight: 500;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: all 0.3s ease;
+}
+
+.error-message {
+    background-color: #e74c3c;
+    border-left: 5px solid #c0392b;
+}
+
+.success-message {
+    background-color: #2ecc71;
+    border-left: 5px solid #27ae60;
+}
+
+.error-message.show,
+.success-message.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Placeholder Images */
+.placeholder-img {
+    opacity: 0.7;
+    filter: grayscale(100%);
+}
+
+/* Cart Count Animation */
+.cart-count {
+    transition: transform 0.3s ease;
+}
+
+.cart-count.updated {
+    transform: scale(1.2);
+}
+
+/* Loading States */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8) url('/assets/images/loading.gif') center no-repeat;
+    z-index: 2;
+}
+
+/* Form Validation Styles */
+.form-control.error {
+    border-color: #e74c3c;
+}
+
+.form-error-message {
+    color: #e74c3c;
+    font-size: 0.875rem;
+    margin-top: 5px;
+}
+
+/* Quantity Controls */
+.quantity-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quantity-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.quantity-btn:hover {
+    background: #f8f9fa;
+}
+
+.quantity-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.quantity-input {
+    width: 60px;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+/* Cart Item Styles */
+.cart-item {
+    position: relative;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    background: #fff;
+}
+
+.cart-item:hover {
+    box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+}
+
+.cart-item .remove-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    padding: 5px;
+}
+
+/* Responsive Images */
+.team-logo,
+.stadium-image,
+.match-image {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/* Debug Info (only visible in development) */
+.debug-info {
+    display: none;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-family: monospace;
+}
+
+body.debug .debug-info {
+    display: block;
+} 
