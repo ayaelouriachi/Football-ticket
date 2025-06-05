@@ -9,35 +9,12 @@ class Cart {
     private $userId;
     private $sessionId;
     private $session;
-    private $logger;
     
     public function __construct($db, &$session) {
         $this->db = $db;
         $this->session = &$session;
         $this->userId = isset($session['user_id']) ? $session['user_id'] : null;
         $this->sessionId = session_id();
-        $this->initializeCart();
-        
-        // Clean expired cart items
-        $this->cleanExpiredItems();
-    }
-    
-    private function initializeCart() {
-        if (!isset($_SESSION['cart'])) {
-            $_SESSION['cart'] = [];
-        }
-        if (!isset($_SESSION['cart_last_updated'])) {
-            $_SESSION['cart_last_updated'] = time();
-        }
-    }
-    
-    private function cleanExpiredItems() {
-        $timeout = time() - CART_EXPIRY;
-        foreach ($_SESSION['cart'] as $categoryId => $item) {
-            if ($item['added_at'] < $timeout) {
-                unset($_SESSION['cart'][$categoryId]);
-            }
-        }
     }
     
     public function addItem($categoryId, $quantity) {
@@ -64,35 +41,52 @@ class Cart {
                 throw new Exception("This match has already taken place");
             }
             
-            // Check cart timeout
-            if (isset($_SESSION['cart_last_updated']) && 
-                (time() - $_SESSION['cart_last_updated'] > CART_EXPIRY)) {
-                $this->clearCart();
-                throw new Exception("Your cart has expired. Please try again.");
-            }
+            // Begin transaction
+            $this->db->beginTransaction();
             
-            // Add to cart
-            $cartItem = [
-                'category_id' => $categoryId,
-                'quantity' => $quantity,
-                'price' => $availability['price'],
-                'added_at' => time()
-            ];
-
-            if (isset($_SESSION['cart'][$categoryId])) {
-                $newQuantity = $_SESSION['cart'][$categoryId]['quantity'] + $quantity;
+            // Check if item already exists in cart
+            $stmt = $this->db->prepare("
+                SELECT id, quantity 
+                FROM {$this->table} 
+                WHERE (user_id = ? OR session_id = ?) 
+                AND ticket_category_id = ?
+            ");
+            $stmt->execute([$this->userId, $this->sessionId, $categoryId]);
+            $existingItem = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existingItem) {
+                // Update existing item
+                $newQuantity = $existingItem['quantity'] + $quantity;
                 if ($newQuantity > $availability['available_tickets']) {
                     throw new Exception("Cannot add more tickets than available");
                 }
                 if ($newQuantity > MAX_TICKETS_PER_CATEGORY) {
                     throw new Exception("Maximum " . MAX_TICKETS_PER_CATEGORY . " tickets allowed per category");
                 }
-                $_SESSION['cart'][$categoryId]['quantity'] = $newQuantity;
+                
+                $stmt = $this->db->prepare("
+                    UPDATE {$this->table} 
+                    SET quantity = ?, updated_at = NOW() 
+                    WHERE id = ?
+                ");
+                $stmt->execute([$newQuantity, $existingItem['id']]);
             } else {
-                $_SESSION['cart'][$categoryId] = $cartItem;
+                // Add new item
+                $stmt = $this->db->prepare("
+                    INSERT INTO {$this->table} 
+                    (user_id, session_id, ticket_category_id, quantity, price) 
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $this->userId,
+                    $this->sessionId,
+                    $categoryId,
+                    $quantity,
+                    $availability['price']
+                ]);
             }
             
-            $_SESSION['cart_last_updated'] = time();
+            $this->db->commit();
             
             return [
                 'success' => true,
@@ -101,6 +95,9 @@ class Cart {
             ];
             
         } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             error_log("Cart Error: " . $e->getMessage());
             return [
                 'success' => false,
@@ -111,10 +108,6 @@ class Cart {
     
     public function updateItem($categoryId, $quantity) {
         try {
-            if (!isset($_SESSION['cart'][$categoryId])) {
-                throw new Exception("Item not found in cart");
-            }
-
             if ($quantity < 1 || $quantity > MAX_TICKETS_PER_CATEGORY) {
                 throw new Exception("Invalid quantity. Must be between 1 and " . MAX_TICKETS_PER_CATEGORY);
             }
@@ -127,8 +120,18 @@ class Cart {
                 throw new Exception("Not enough tickets available");
             }
             
-            $_SESSION['cart'][$categoryId]['quantity'] = $quantity;
-            $_SESSION['cart_last_updated'] = time();
+            $stmt = $this->db->prepare("
+                UPDATE {$this->table} 
+                SET quantity = ?, updated_at = NOW() 
+                WHERE (user_id = ? OR session_id = ?) 
+                AND ticket_category_id = ?
+            ");
+            
+            $stmt->execute([$quantity, $this->userId, $this->sessionId, $categoryId]);
+            
+            if ($stmt->rowCount() === 0) {
+                throw new Exception("Item not found in cart");
+            }
             
             return [
                 'success' => true,
@@ -148,12 +151,17 @@ class Cart {
     
     public function removeItem($categoryId) {
         try {
-            if (!isset($_SESSION['cart'][$categoryId])) {
+            $stmt = $this->db->prepare("
+                DELETE FROM {$this->table} 
+                WHERE (user_id = ? OR session_id = ?) 
+                AND ticket_category_id = ?
+            ");
+            
+            $stmt->execute([$this->userId, $this->sessionId, $categoryId]);
+            
+            if ($stmt->rowCount() === 0) {
                 throw new Exception("Item not found in cart");
             }
-
-            unset($_SESSION['cart'][$categoryId]);
-            $_SESSION['cart_last_updated'] = time();
             
             return [
                 'success' => true,
@@ -173,50 +181,38 @@ class Cart {
     
     public function getCartContents() {
         try {
-            if (empty($_SESSION['cart'])) {
-                return [
-                    'items' => [],
-                    'total' => 0,
-                    'count' => 0
-                ];
-            }
-
-            $items = [];
+            $stmt = $this->db->prepare("
+                SELECT ci.*, tc.name as category_name, tc.name, 
+                       m.title as match_title, m.match_date,
+                       t1.name as team1_name, t2.name as team2_name,
+                       t1.logo as team1_logo, t2.logo as team2_logo,
+                       s.name as stadium_name
+                FROM {$this->table} ci
+                JOIN ticket_categories tc ON ci.ticket_category_id = tc.id
+                JOIN matches m ON tc.match_id = m.id
+                JOIN teams t1 ON m.team1_id = t1.id
+                JOIN teams t2 ON m.team2_id = t2.id
+                JOIN stadiums s ON m.stadium_id = s.id
+                WHERE ci.user_id = ? OR ci.session_id = ?
+                ORDER BY ci.added_at DESC
+            ");
+            
+            $stmt->execute([$this->userId, $this->sessionId]);
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
             $total = 0;
             $count = 0;
-
-            foreach ($_SESSION['cart'] as $categoryId => $item) {
-                $stmt = $this->db->prepare("
-                    SELECT tc.*, m.title as match_title, m.match_date,
-                           t1.name as team1_name, t2.name as team2_name,
-                           t1.logo as team1_logo, t2.logo as team2_logo,
-                           s.name as stadium_name
-                    FROM ticket_categories tc
-                    JOIN matches m ON tc.match_id = m.id
-                    JOIN teams t1 ON m.team1_id = t1.id
-                    JOIN teams t2 ON m.team2_id = t2.id
-                    JOIN stadiums s ON m.stadium_id = s.id
-                    WHERE tc.id = ?
-                ");
-                $stmt->execute([$categoryId]);
-                $ticketInfo = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if ($ticketInfo) {
-                    // Check if match hasn't passed
-                    if (strtotime($ticketInfo['match_date']) < time()) {
-                        unset($_SESSION['cart'][$categoryId]);
-                        continue;
-                    }
-                    
-                    $subtotal = $item['quantity'] * $item['price'];
-                    $items[] = array_merge($ticketInfo, [
-                        'quantity' => $item['quantity'],
-                        'price' => $item['price'],
-                        'subtotal' => $subtotal
-                    ]);
-                    $total += $subtotal;
-                    $count += $item['quantity'];
+            
+            foreach ($items as &$item) {
+                // Remove expired items
+                if (strtotime($item['match_date']) < time()) {
+                    $this->removeItem($item['ticket_category_id']);
+                    continue;
                 }
+                
+                $item['subtotal'] = $item['price'] * $item['quantity'];
+                $total += $item['subtotal'];
+                $count += $item['quantity'];
             }
             
             return [
@@ -237,54 +233,74 @@ class Cart {
     }
     
     public function getCartCount() {
-        return array_sum(array_column($_SESSION['cart'], 'quantity'));
+        try {
+            $stmt = $this->db->prepare("
+                SELECT SUM(quantity) as count
+                FROM {$this->table}
+                WHERE user_id = ? OR session_id = ?
+            ");
+            
+            $stmt->execute([$this->userId, $this->sessionId]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return (int)($result['count'] ?? 0);
+            
+        } catch (Exception $e) {
+            error_log("Cart Count Error: " . $e->getMessage());
+            return 0;
+        }
     }
     
     public function clearCart() {
-        $_SESSION['cart'] = [];
-        $_SESSION['cart_last_updated'] = time();
-        
-        return [
-            'success' => true,
-            'message' => 'Cart cleared successfully'
-        ];
+        try {
+            $stmt = $this->db->prepare("
+                DELETE FROM {$this->table}
+                WHERE user_id = ? OR session_id = ?
+            ");
+            
+            $stmt->execute([$this->userId, $this->sessionId]);
+            
+            return [
+                'success' => true,
+                'message' => 'Cart cleared successfully'
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Clear Cart Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
     }
     
     public function validateCart() {
         try {
-            if (empty($_SESSION['cart'])) {
+            $contents = $this->getCartContents();
+            
+            if (empty($contents['items'])) {
                 throw new Exception("Cart is empty");
             }
-
-            foreach ($_SESSION['cart'] as $categoryId => $item) {
-                $stmt = $this->db->prepare("
-                    SELECT tc.*, m.match_date, m.title as match_title
-                    FROM ticket_categories tc
-                    JOIN matches m ON tc.match_id = m.id 
-                    WHERE tc.id = ?
-                ");
-                $stmt->execute([$categoryId]);
-                $ticket = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if (!$ticket) {
-                    unset($_SESSION['cart'][$categoryId]);
-                    throw new Exception("One or more items in your cart are no longer available");
+            
+            foreach ($contents['items'] as $item) {
+                $ticketCategory = new TicketCategory($this->db);
+                $availability = $ticketCategory->checkAvailability($item['ticket_category_id'], $item['quantity']);
+                
+                if (!$availability['available']) {
+                    throw new Exception("Not enough tickets available for {$item['category_name']}");
                 }
-
-                if ($ticket['remaining_tickets'] < $item['quantity']) {
-                    throw new Exception("Not enough tickets available for {$ticket['name']}");
-                }
-
-                if (strtotime($ticket['match_date']) < time()) {
-                    unset($_SESSION['cart'][$categoryId]);
-                    throw new Exception("Match date has passed for {$ticket['match_title']}");
+                
+                if (strtotime($item['match_date']) < time()) {
+                    $this->removeItem($item['ticket_category_id']);
+                    throw new Exception("Match date has passed for {$item['match_title']}");
                 }
             }
-
+            
             return [
                 'success' => true,
                 'message' => 'Cart validation successful'
             ];
+            
         } catch (Exception $e) {
             error_log("Cart Validation Error: " . $e->getMessage());
             return [

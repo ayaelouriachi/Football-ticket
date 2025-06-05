@@ -26,72 +26,46 @@ class Auth {
      */
     public function login($email, $password) {
         try {
-            // S'assurer que la session est active
-            SessionManager::init();
-            
-            // Get user by email
-            $stmt = $this->db->prepare('
-                SELECT id, name, email, password, role, is_active 
-                FROM users 
-                WHERE email = ? AND is_active = 1
-                LIMIT 1
-            ');
+            $stmt = $this->db->prepare("SELECT * FROM {$this->table} WHERE email = ?");
             $stmt->execute([$email]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Debug log
-            error_log("Login attempt for email: " . $email);
-            
-            // Verify user exists and password is correct
-            if (!$user) {
-                error_log("User not found: " . $email);
-                return false;
+            if (!$user || !password_verify($password, $user['password'])) {
+                return [
+                    'success' => false,
+                    'message' => 'Email ou mot de passe incorrect'
+                ];
             }
             
-            // Debug log password info (REMOVE IN PRODUCTION)
-            error_log("Stored password hash: " . $user['password']);
-            error_log("Password hash type: " . (password_get_info($user['password'])['algoName'] ?? 'unknown'));
-            
-            // Verify password
-            if (!password_verify($password, $user['password'])) {
-                error_log("Password verification failed for user: " . $email);
-                return false;
+            // Transférer le panier de la session à l'utilisateur
+            if ($this->cart) {
+                $oldSessionId = session_id();
+                $this->cart->transferCart($oldSessionId, $user['id']);
             }
             
-            // Remove sensitive data
-            unset($user['password']);
-            
-            // Regenerate session ID
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                session_regenerate_id(true);
-            }
-            
-            // Set session data
+            // Créer la session utilisateur
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_role'] = $user['role'];
-            $_SESSION['last_activity'] = time();
             
-            try {
-                // Update last login timestamp
-                $stmt = $this->db->prepare('
-                    UPDATE users 
-                    SET last_login = CURRENT_TIMESTAMP 
-                    WHERE id = ?
-                ');
-                $stmt->execute([$user['id']]);
-            } catch (PDOException $e) {
-                // Log error but don't fail login
-                error_log("Failed to update last_login: " . $e->getMessage());
-            }
+            return [
+                'success' => true,
+                'message' => 'Connexion réussie',
+                'user' => [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'email' => $user['email'],
+                    'role' => $user['role']
+                ]
+            ];
             
-            error_log("Login successful for user: " . $email);
-            return $user;
-            
-        } catch (PDOException $e) {
-            error_log("Login error: " . $e->getMessage());
-            return false;
+        } catch (Exception $e) {
+            error_log("Login Error: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => "Erreur lors de la connexion"
+            ];
         }
     }
     
@@ -281,23 +255,13 @@ class Auth {
     
     public function logout() {
         try {
-            // Vider le panier avant la déconnexion
-            if ($this->cart) {
-                $this->cart->clearCart();
-            }
-            
             // Supprimer toutes les données de session liées à l'utilisateur
             unset(
                 $_SESSION['user_id'],
                 $_SESSION['user_name'],
                 $_SESSION['user_email'],
-                $_SESSION['user_role'],
-                $_SESSION['cart'],
-                $_SESSION['cart_count']
+                $_SESSION['user_role']
             );
-            
-            // Détruire complètement la session
-            $this->session->destroy();
             
             // Démarrer une nouvelle session pour les messages flash
             SessionManager::init();

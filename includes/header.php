@@ -1,8 +1,10 @@
 <?php
+require_once(__DIR__ . '/../config/database.php');
 require_once(__DIR__ . '/../config/session.php');
 require_once(__DIR__ . '/../config/constants.php');
 require_once(__DIR__ . '/../includes/auth_middleware.php');
 require_once(__DIR__ . '/../includes/flash_messages.php');
+require_once(__DIR__ . '/../classes/Cart.php');
 
 // Initialize session
 SessionManager::init();
@@ -10,8 +12,9 @@ SessionManager::init();
 // Get current user if logged in
 $currentUser = getCurrentUser();
 
-// Get cart count
-$cartCount = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
+// Initialize cart and get count
+$cart = new Cart($db, $_SESSION);
+$cartCount = $cart->getCartCount();
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -200,24 +203,27 @@ $cartCount = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
         border: none;
         color: #333;
         cursor: pointer;
+        transition: color 0.2s;
     }
-    
+
+    .cart-toggle:hover {
+        color: #007bff;
+    }
+
     .cart-count {
         position: absolute;
-        top: 0;
-        right: 0;
+        top: -5px;
+        right: -5px;
+        background: #dc3545;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: bold;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 18px;
-        height: 18px;
-        padding: 0 5px;
-        background: #dc3545;
-        color: white;
-        font-size: 12px;
-        font-weight: bold;
-        border-radius: 9px;
-        transform: translate(50%, -50%);
     }
     
     /* Auth buttons */

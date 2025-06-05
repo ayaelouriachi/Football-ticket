@@ -122,140 +122,90 @@ include 'includes/header.php';
 .teams-container {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
-    padding: 0.5rem;
-    background: white;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    gap: 1rem;
 }
 
 .team-logo {
-    width: 64px;
-    height: 64px;
-    padding: 8px;
-    background: white;
-    border-radius: 50%;
-    transition: var(--transition);
-}
-
-.team-logo:hover {
-    transform: scale(1.1);
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
 }
 
 .vs-badge {
-    background: var(--primary);
-    color: white;
-    padding: 0.5rem 1.2rem;
-    border-radius: 30px;
-    font-weight: 600;
-    font-size: 1rem;
-    box-shadow: var(--shadow);
+    font-weight: bold;
+    color: var(--gray);
 }
 
 .match-details {
-    flex-grow: 1;
+    flex: 1;
 }
 
 .match-title {
-    font-size: 1.5rem;
-    font-weight: 700;
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
     color: var(--dark);
-    margin-bottom: 0.75rem;
 }
 
 .match-meta {
     display: flex;
-    gap: 2rem;
+    gap: 1.5rem;
+    color: var(--gray);
 }
 
 .meta-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    color: var(--gray);
-    font-size: 1rem;
-    background: white;
-    padding: 0.5rem 1rem;
-    border-radius: 25px;
-    box-shadow: var(--shadow);
-}
-
-.meta-item i {
-    color: var(--primary);
-    font-size: 1.1rem;
+    gap: 0.5rem;
 }
 
 .ticket-body {
     padding: 1.5rem;
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 2rem;
+    align-items: center;
 }
 
 .quantity-section {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .quantity-label {
-    font-size: 0.95rem;
+    font-size: 0.875rem;
     color: var(--gray);
-    font-weight: 500;
 }
 
 .quantity-wrapper {
     display: flex;
     align-items: center;
-    background: var(--secondary);
-    border-radius: var(--radius);
-    padding: 0.5rem;
     gap: 0.5rem;
-    box-shadow: var(--shadow);
 }
 
 .btn-quantity {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 12px;
+    background: var(--light);
+    border-radius: 8px;
     cursor: pointer;
     transition: var(--transition);
-    background: white;
-    box-shadow: var(--shadow);
-}
-
-.btn-quantity.minus {
-    color: var(--danger);
-}
-
-.btn-quantity.plus {
-    color: var(--success);
 }
 
 .btn-quantity:hover {
-    transform: scale(1.1);
-}
-
-.btn-quantity i {
-    font-size: 1.2rem;
+    background: var(--primary);
+    color: white;
 }
 
 .quantity-input {
-    width: 60px;
-    height: 40px;
+    width: 50px;
     text-align: center;
-    border: 1px solid rgba(0,0,0,0.1);
-    border-radius: 12px;
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: var(--dark);
-    background: white;
+    border: 1px solid var(--light);
+    border-radius: 8px;
+    padding: 0.25rem;
 }
 
 .price-section {
@@ -266,149 +216,122 @@ include 'includes/header.php';
 
 .price-tag {
     text-align: right;
-    background: var(--secondary);
-    padding: 1rem 1.5rem;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
 }
 
 .price-label {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--gray);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 .price-value {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 1.25rem;
+    font-weight: bold;
     color: var(--dark);
 }
 
 .btn-delete {
-    background: var(--danger);
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: var(--radius);
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    box-shadow: var(--shadow);
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    color: var(--danger);
+    cursor: pointer;
+    transition: var(--transition);
 }
 
 .btn-delete:hover {
-    background: #c0392b;
-    transform: translateY(-2px);
+    color: #c0392b;
 }
 
-.btn-delete i {
-    font-size: 1.2rem;
-}
-
-/* Style du résumé de commande */
 .cart-summary {
     background: white;
     border-radius: var(--radius);
-    padding: 2rem;
     box-shadow: var(--shadow);
+    padding: 1.5rem;
     position: sticky;
     top: 2rem;
 }
 
 .summary-title {
-    font-size: 1.5rem;
-    font-weight: 700;
+    margin: 0 0 1.5rem;
+    font-size: 1.25rem;
     color: var(--dark);
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid var(--secondary);
 }
 
 .summary-item {
     display: flex;
     justify-content: space-between;
     margin-bottom: 1rem;
-    padding: 0.75rem;
-    background: var(--secondary);
-    border-radius: var(--radius);
     color: var(--gray);
 }
 
 .summary-total {
     display: flex;
     justify-content: space-between;
-    font-size: 1.5rem;
-    font-weight: 700;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--light);
+    font-weight: bold;
     color: var(--dark);
-    margin-top: 1.5rem;
-    padding: 1rem;
-    background: var(--secondary);
-    border-radius: var(--radius);
 }
 
 .checkout-btn {
-    background: var(--success);
-    color: white;
-    border: none;
-    width: 100%;
-    padding: 1rem;
-    border-radius: var(--radius);
-    font-size: 1.2rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
-    margin-top: 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
-    box-shadow: var(--shadow);
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border: none;
+    background: var(--primary);
+    color: white;
+    border-radius: var(--radius);
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
 }
 
 .checkout-btn:hover {
-    background: #27ae60;
+    background: #2980b9;
     transform: translateY(-2px);
 }
 
-.checkout-btn i {
-    font-size: 1.3rem;
-}
-
-/* Style pour panier vide */
 .empty-cart {
     text-align: center;
-    padding: 4rem 2rem;
-    background: white;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    padding: 3rem 1rem;
 }
 
 .empty-cart-icon {
-    font-size: 5rem;
+    font-size: 4rem;
     color: var(--gray);
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 
 .empty-cart h3 {
-    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
     color: var(--dark);
-    margin-bottom: 1rem;
 }
 
 .empty-cart p {
     color: var(--gray);
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .empty-cart .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
     background: var(--primary);
+    color: white;
     border: none;
-    padding: 1rem 2rem;
-    font-size: 1.1rem;
     border-radius: var(--radius);
+    text-decoration: none;
+    font-weight: 500;
     transition: var(--transition);
 }
 
@@ -534,7 +457,7 @@ include 'includes/header.php';
                                     <div class="match-meta">
                                         <div class="meta-item">
                                             <i class="bi bi-ticket-perforated"></i>
-                                            <span><?php echo htmlspecialchars($item['name']); ?></span>
+                                            <span><?php echo htmlspecialchars($item['category_name']); ?></span>
                                         </div>
                                         <div class="meta-item">
                                             <i class="bi bi-calendar-event"></i>
@@ -547,20 +470,20 @@ include 'includes/header.php';
                         <div class="ticket-body">
                             <div class="quantity-section">
                                 <label class="quantity-label">Quantité</label>
-                                <form method="post" id="quantity-form-<?php echo $item['id']; ?>" class="quantity-form">
+                                <form method="post" id="quantity-form-<?php echo $item['ticket_category_id']; ?>" class="quantity-form">
                                     <input type="hidden" name="action" value="update">
-                                    <input type="hidden" name="category_id" value="<?php echo $item['id']; ?>">
+                                    <input type="hidden" name="category_id" value="<?php echo $item['ticket_category_id']; ?>">
                                     <div class="quantity-wrapper">
-                                        <button type="button" class="btn-quantity minus" onclick="updateQuantity(<?php echo $item['id']; ?>, -1)">
+                                        <button type="button" class="btn-quantity minus" onclick="updateQuantity(<?php echo $item['ticket_category_id']; ?>, -1)">
                                             <i class="bi bi-dash-lg"></i>
                                         </button>
                                         <input type="text" 
-                                               id="quantity-<?php echo $item['id']; ?>"
+                                               id="quantity-<?php echo $item['ticket_category_id']; ?>"
                                                name="quantity" 
                                                value="<?php echo $item['quantity']; ?>" 
                                                class="quantity-input"
                                                readonly>
-                                        <button type="button" class="btn-quantity plus" onclick="updateQuantity(<?php echo $item['id']; ?>, 1)">
+                                        <button type="button" class="btn-quantity plus" onclick="updateQuantity(<?php echo $item['ticket_category_id']; ?>, 1)">
                                             <i class="bi bi-plus-lg"></i>
                                         </button>
                                     </div>
@@ -573,7 +496,7 @@ include 'includes/header.php';
                                 </div>
                                 <form method="post" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce billet ?');">
                                     <input type="hidden" name="action" value="remove">
-                                    <input type="hidden" name="category_id" value="<?php echo $item['id']; ?>">
+                                    <input type="hidden" name="category_id" value="<?php echo $item['ticket_category_id']; ?>">
                                     <button type="submit" class="btn-delete">
                                         <i class="bi bi-trash"></i>
                                         <span>Supprimer</span>
