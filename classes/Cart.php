@@ -32,7 +32,7 @@ class Cart {
     }
     
     private function cleanExpiredItems() {
-        $timeout = time() - CART_TIMEOUT;
+        $timeout = time() - CART_EXPIRY;
         foreach ($_SESSION['cart'] as $categoryId => $item) {
             if ($item['added_at'] < $timeout) {
                 unset($_SESSION['cart'][$categoryId]);
@@ -66,7 +66,7 @@ class Cart {
             
             // Check cart timeout
             if (isset($_SESSION['cart_last_updated']) && 
-                (time() - $_SESSION['cart_last_updated'] > CART_TIMEOUT)) {
+                (time() - $_SESSION['cart_last_updated'] > CART_EXPIRY)) {
                 $this->clearCart();
                 throw new Exception("Your cart has expired. Please try again.");
             }

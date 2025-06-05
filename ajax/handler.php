@@ -25,6 +25,11 @@ $action = $_POST['action'] ?? '';
 $response = ['success' => false, 'message' => 'Action non définie'];
 
 try {
+    // Validate CSRF token
+    if (!validateCSRFToken(getRequestHeader('X-CSRF-Token'))) {
+        throw new Exception('Invalid CSRF token');
+    }
+
     switch ($action) {
         case 'add_to_cart':
             $response = handleAddToCart();

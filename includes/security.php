@@ -1,6 +1,24 @@
 <?php
 
 class SecurityHelper {
+    // Constante pour la clé de session du token CSRF
+    const CSRF_TOKEN_KEY = 'csrf_token';
+    
+    // Générer un token CSRF
+    public static function generateCSRFToken() {
+        if (!isset($_SESSION[self::CSRF_TOKEN_KEY])) {
+            $_SESSION[self::CSRF_TOKEN_KEY] = self::generateToken();
+        }
+        return $_SESSION[self::CSRF_TOKEN_KEY];
+    }
+    
+    // Vérifier un token CSRF
+    public static function verifyCSRFToken($token) {
+        if (empty($token) || empty($_SESSION[self::CSRF_TOKEN_KEY])) {
+            return false;
+        }
+        return hash_equals($_SESSION[self::CSRF_TOKEN_KEY], $token);
+    }
     
     // Nettoyer les données d'entrée
     public static function sanitizeInput($data) {
@@ -100,5 +118,14 @@ class SecurityHelper {
     public static function generateFileHash($filePath) {
         return hash_file('sha256', $filePath);
     }
+}
+
+// Fonctions globales pour la compatibilité
+function generateCSRFToken() {
+    return SecurityHelper::generateCSRFToken();
+}
+
+function verifyCSRFToken($token) {
+    return SecurityHelper::verifyCSRFToken($token);
 }
 ?>

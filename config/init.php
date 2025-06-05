@@ -25,15 +25,6 @@ spl_autoload_register(function ($class) {
 // Set timezone
 date_default_timezone_set('UTC');
 
-// Définir la constante de timeout du panier si elle n'existe pas
-if (!defined('CART_TIMEOUT')) {
-    define('CART_TIMEOUT', 7200); // 2 heures
-}
-
-if (!defined('MAX_TICKETS_PER_CATEGORY')) {
-    define('MAX_TICKETS_PER_CATEGORY', 10);
-}
-
 // Fonction pour gérer les erreurs d'images (version JavaScript)
 ?>
 <script>

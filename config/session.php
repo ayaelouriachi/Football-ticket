@@ -1,49 +1,67 @@
 <?php
 class SessionManager {
-    private static $started = false;
+    private static $initialized = false;
     
     public static function init() {
-        if (self::$started) {
+        if (self::$initialized) {
             return;
         }
         
-        if (session_status() === PHP_SESSION_NONE) {
-            // Configuration sécurisée des sessions avant le démarrage
-            ini_set('session.cookie_httponly', 1);
-            ini_set('session.use_only_cookies', 1);
-            ini_set('session.cookie_samesite', 'Strict');
+        // Prevent headers already sent errors
+        if (!headers_sent()) {
+            // Configuration des cookies de session
+            session_set_cookie_params([
+                'lifetime' => 0,
+                'path' => '/',
+                'domain' => '',
+                'secure' => true,
+                'httponly' => true,
+                'samesite' => 'Lax'
+            ]);
             
-            // En production, activer cookie_secure
-            if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-                ini_set('session.cookie_secure', 1);
+            // Configuration de la session
+            ini_set('session.use_strict_mode', 1);
+            ini_set('session.use_only_cookies', 1);
+            ini_set('session.cookie_httponly', 1);
+            ini_set('session.cookie_secure', 1);
+            ini_set('session.cookie_samesite', 'Lax');
+            ini_set('session.gc_maxlifetime', 3600);
+            
+            // Démarrer la session si elle n'est pas déjà active
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
             }
             
-            // Nom de session personnalisé
-            session_name('FOOTBALL_TICKETS_SESSION');
-            
-            // Durée de vie de la session (2 heures)
-            ini_set('session.gc_maxlifetime', 7200);
-            ini_set('session.cookie_lifetime', 7200);
-            
-            // Démarrage de la session
-            session_start();
+            self::$initialized = true;
         }
-        
-        // Régénération de l'ID de session pour éviter la fixation
-        if (!isset($_SESSION['initiated'])) {
+    }
+    
+    public static function destroy() {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_unset();
+            session_destroy();
+            setcookie(session_name(), '', time() - 3600, '/');
+        }
+    }
+    
+    public static function regenerate() {
+        if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
-            $_SESSION['initiated'] = true;
         }
-        
-        // Vérification de l'expiration de la session
-        if (isset($_SESSION['last_activity']) && 
-            (time() - $_SESSION['last_activity'] > 7200)) {
-            self::destroy();
-            return;
-        }
-        
-        $_SESSION['last_activity'] = time();
-        self::$started = true;
+    }
+    
+    public static function setFlashMessage($type, $message) {
+        $_SESSION['flash_messages'][$type][] = $message;
+    }
+    
+    public static function getFlashMessages() {
+        $messages = $_SESSION['flash_messages'] ?? [];
+        unset($_SESSION['flash_messages']);
+        return $messages;
+    }
+    
+    public static function isActive() {
+        return session_status() === PHP_SESSION_ACTIVE;
     }
     
     public static function set($key, $value) {
@@ -56,41 +74,19 @@ class SessionManager {
         return $_SESSION[$key] ?? $default;
     }
     
-    public static function has($key) {
-        self::init();
-        return isset($_SESSION[$key]);
-    }
-    
     public static function remove($key) {
         self::init();
         unset($_SESSION[$key]);
     }
     
-    public static function destroy() {
+    public static function has($key) {
         self::init();
-        session_unset();
-        session_destroy();
-        self::$started = false;
+        return isset($_SESSION[$key]);
     }
     
-    public static function regenerateId() {
+    public static function clear() {
         self::init();
-        session_regenerate_id(true);
-    }
-    
-    // Génération de token CSRF
-    public static function generateCSRFToken() {
-        self::init();
-        if (!isset($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        }
-        return $_SESSION['csrf_token'];
-    }
-    
-    // Vérification du token CSRF
-    public static function verifyCSRFToken($token) {
-        self::init();
-        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+        $_SESSION = array();
     }
 }
 ?>

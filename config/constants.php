@@ -7,7 +7,7 @@ if (!defined('APP_NAME')) {
     define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
 
     // URLs
-    define('BASE_URL', 'http://localhost/football_tickets/');
+    define('BASE_URL', 'http://' . $_SERVER['HTTP_HOST'] . '/football_tickets/');
     define('ADMIN_URL', BASE_URL . 'admin/');
     define('ASSETS_URL', BASE_URL . 'assets/');
     define('UPLOADS_URL', BASE_URL . 'uploads/');
@@ -41,6 +41,7 @@ if (!defined('APP_NAME')) {
     // Cart
     define('CART_EXPIRY', 7200); // 2 hours
     define('MAX_TICKETS_PER_ORDER', 10);
+    define('MAX_TICKETS_PER_CATEGORY', 5); // Maximum tickets per category
 
     // Configuration PayPal
     define('PAYPAL_ENVIRONMENT', APP_ENV === 'production' ? 'live' : 'sandbox');

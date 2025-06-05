@@ -1,5 +1,5 @@
 <?php
-require_once 'config/init.php';
+require_once __DIR__ . '/config/init.php';
 
 // Initialize cart
 $cart = new Cart($db, $_SESSION);
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$result['success']) {
                         throw new Exception($result['message']);
                     }
-                    header('Location: checkout.php');
+                    header('Location: ' . BASE_URL . 'checkout.php');
                     exit;
             }
         }
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['error'] = $e->getMessage();
     }
     
-    header('Location: cart.php');
+    header('Location: ' . BASE_URL . 'cart.php');
     exit;
 }
 
