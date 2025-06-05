@@ -7,7 +7,7 @@ if (!defined('APP_NAME')) {
     define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
 
     // URLs
-    define('BASE_URL', '/football_tickets/');
+    define('BASE_URL', 'http://localhost/football_tickets/');
     define('ADMIN_URL', BASE_URL . 'admin/');
     define('ASSETS_URL', BASE_URL . 'assets/');
     define('UPLOADS_URL', BASE_URL . 'uploads/');

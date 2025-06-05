@@ -94,7 +94,7 @@ SessionManager::init();
                                     <div class="cart-total">
                                         <strong>Total: <span id="cart-total">0.00 MAD</span></strong>
                                     </div>
-                                    <a href="<?php echo BASE_URL; ?>pages/cart.php" class="btn btn-primary btn-block">
+                                   <a href="http://localhost/football_tickets/cart.php" class="btn btn-primary btn-block">
                                         Voir le panier
                                     </a>
                                 </div>
