@@ -71,12 +71,8 @@
                     </div>
                     
                     <div class="payment-methods">
-                        <h4>Moyens de paiement</h4>
-                        <div class="payment-icons">
-                            <img src="<?php echo ASSETS_URL; ?>images/paypal.png" alt="PayPal" title="PayPal">
-                            <img src="<?php echo ASSETS_URL; ?>images/visa.png" alt="Visa" title="Visa">
-                            <img src="<?php echo ASSETS_URL; ?>images/mastercard.png" alt="Mastercard" title="Mastercard">
-                        </div>
+                        <img src="<?php echo ASSETS_URL; ?>images/visa.png" alt="Visa" title="Visa">
+                        <img src="<?php echo ASSETS_URL; ?>images/mastercard.png" alt="Mastercard" title="Mastercard">
                     </div>
                 </div>
             </div>

@@ -1,9 +1,25 @@
 <?php
 require_once __DIR__ . '/config/init.php';
-require_once __DIR__ . '/config/paypal.php';
 
 // Initialize cart
 $cart = new Cart($db, $_SESSION);
+
+// Handle payment status and errors
+if (isset($_GET['payment_status'])) {
+    if ($_GET['payment_status'] === 'success' && isset($_GET['order_id'])) {
+        // Payment successful
+        $_SESSION['success'] = 'Paiement effectué avec succès! Numéro de commande : ' . htmlspecialchars($_GET['order_id']);
+        
+        // Clear the cart
+        $cart->clearCart();
+    } elseif ($_GET['payment_status'] === 'cancel') {
+        $_SESSION['error'] = 'Le paiement a été annulé.';
+    }
+}
+
+if (isset($_GET['error'])) {
+    $_SESSION['error'] = htmlspecialchars($_GET['error']);
+}
 
 // Handle cart actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -12,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             switch ($_POST['action']) {
                 case 'update':
                     if (!isset($_POST['category_id']) || !isset($_POST['quantity'])) {
-                        throw new Exception('Missing parameters for cart update');
+                        throw new Exception('Paramètres manquants pour la mise à jour du panier');
                     }
                     $result = $cart->updateItem($_POST['category_id'], $_POST['quantity']);
                     if (!$result['success']) {
@@ -23,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 case 'remove':
                     if (!isset($_POST['category_id'])) {
-                        throw new Exception('Missing category ID for removal');
+                        throw new Exception('ID de catégorie manquant pour la suppression');
                     }
                     $result = $cart->removeItem($_POST['category_id']);
                     if (!$result['success']) {
@@ -51,7 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Get cart contents
 $cart_contents = $cart->getCartContents();
-$total_usd = number_format($cart_contents['total'] * MAD_TO_USD_RATE, 2);
 
 $pageTitle = "Mon Panier";
 include 'includes/header.php';
@@ -91,12 +106,14 @@ include 'includes/header.php';
                                     <img src="<?php echo htmlspecialchars($item['team1_logo'] ?? 'assets/images/default-team.png'); ?>" 
                                          alt="<?php echo htmlspecialchars($item['team1_name']); ?>"
                                          class="team-logo"
-                                         onerror="this.src='assets/images/default-team.png'">
+                                         onerror="handleImageError(this)"
+                                         data-type="team">
                                     <span class="vs-badge">VS</span>
                                     <img src="<?php echo htmlspecialchars($item['team2_logo'] ?? 'assets/images/default-team.png'); ?>" 
                                          alt="<?php echo htmlspecialchars($item['team2_name']); ?>"
                                          class="team-logo"
-                                         onerror="this.src='assets/images/default-team.png'">
+                                         onerror="handleImageError(this)"
+                                         data-type="team">
                                 </div>
                                 <div class="match-details">
                                     <h3 class="match-title"><?php echo htmlspecialchars($item['match_title']); ?></h3>
@@ -144,10 +161,6 @@ include 'includes/header.php';
                                     <div class="price-label">Prix total</div>
                                     <div class="price-value"><?php echo number_format($item['subtotal'], 2); ?> MAD</div>
                                 </div>
-                                <div class="price-tag">
-                                    <div class="price-label">Prix total (USD)</div>
-                                    <div class="price-value"><?php echo number_format($item['subtotal'] * MAD_TO_USD_RATE, 2); ?> USD</div>
-                                </div>
                                 <form method="post" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce billet ?');">
                                     <input type="hidden" name="action" value="remove">
                                     <input type="hidden" name="category_id" value="<?php echo $item['ticket_category_id']; ?>">
@@ -174,158 +187,19 @@ include 'includes/header.php';
                     </div>
                     <div class="summary-total">
                         <span>Total</span>
-                        <span>
-                            <?php echo number_format($cart_contents['total'], 2); ?> MAD
-                            <br>
-                            <small class="text-muted">
-                                (<?php echo $total_usd; ?> USD)
-                            </small>
-                        </span>
+                        <span><?php echo number_format($cart_contents['total'], 2); ?> MAD</span>
                     </div>
                     
                     <?php if ($cart_contents['total'] > 0): ?>
-                        <div id="loading-spinner" class="spinner-border text-primary" style="display: none;" role="status">
-                            <span class="visually-hidden">Chargement...</span>
-                        </div>
-                        <div id="paypal-button-container" class="mt-4"></div>
-                        <div id="payment-message" class="alert mt-3" style="display: none;"></div>
+                        <a href="payment.html?amount=<?php echo number_format($cart_contents['total'] / 10, 2); ?>&description=<?php echo urlencode('Achat de billets - Réf: ' . uniqid()); ?>" class="btn btn-primary btn-block mt-4">
+                            <i class="bi bi-credit-card me-2"></i>Procéder au paiement
+                        </a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     <?php endif; ?>
 </div>
-
-<?php if (!empty($cart_contents['items']) && $cart_contents['total'] > 0): ?>
-    <!-- PayPal Script -->
-    <script src="<?php echo PAYPAL_SDK_URL; ?>?client-id=<?php echo PAYPAL_CLIENT_ID; ?>&currency=<?php echo PAYPAL_CURRENCY; ?>&debug=true"></script>
-    
-    <script>
-    // Debug function
-    function debugLog(title, data) {
-        console.log('=== ' + title + ' ===');
-        console.log(data);
-        
-        // Also display in UI
-        const message = document.getElementById('payment-message');
-        message.style.display = 'block';
-        message.className = 'alert alert-info mt-3';
-        message.innerHTML += '<br>' + title + ': ' + JSON.stringify(data);
-    }
-
-    paypal.Buttons({
-        createOrder: function(data, actions) {
-            debugLog('Starting PayPal Payment', { 
-                clientId: '<?php echo PAYPAL_CLIENT_ID; ?>',
-                currency: '<?php echo PAYPAL_CURRENCY; ?>',
-                madAmount: <?php echo $cart_contents['total']; ?>,
-                usdAmount: <?php echo $cart_contents['total'] * MAD_TO_USD_RATE; ?>
-            });
-            
-            document.getElementById('loading-spinner').style.display = 'flex';
-            
-            return fetch('scripts/process_paypal.php', {
-                method: 'post',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: 'action=create_order'
-            })
-            .then(function(response) {
-                debugLog('Server Response', {
-                    status: response.status,
-                    statusText: response.statusText
-                });
-                
-                return response.text().then(function(text) {
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        debugLog('Response Parse Error', { text: text, error: e.message });
-                        throw new Error('Invalid server response');
-                    }
-                });
-            })
-            .then(function(data) {
-                if (!data.success) {
-                    throw new Error(data.message || 'Une erreur est survenue');
-                }
-                debugLog('Order Created', data);
-                document.getElementById('loading-spinner').style.display = 'none';
-                return data.orderID;
-            })
-            .catch(function(error) {
-                document.getElementById('loading-spinner').style.display = 'none';
-                document.getElementById('payment-message').className = 'alert alert-danger mt-3';
-                document.getElementById('payment-message').style.display = 'block';
-                document.getElementById('payment-message').textContent = 'Erreur: ' + error.message;
-                console.error('PayPal create order error:', error);
-                throw error;
-            });
-        },
-        
-        onApprove: function(data, actions) {
-            debugLog('Payment Approved', data);
-            document.getElementById('loading-spinner').style.display = 'flex';
-            
-            return fetch('scripts/process_paypal.php', {
-                method: 'post',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: 'action=capture_order&orderID=' + data.orderID
-            })
-            .then(function(response) {
-                debugLog('Capture Response', {
-                    status: response.status,
-                    statusText: response.statusText
-                });
-                
-                return response.text().then(function(text) {
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        debugLog('Response Parse Error', { text: text, error: e.message });
-                        throw new Error('Invalid server response');
-                    }
-                });
-            })
-            .then(function(data) {
-                if (!data.success) {
-                    throw new Error(data.message || 'Une erreur est survenue lors de la capture du paiement');
-                }
-                debugLog('Payment Captured', data);
-                window.location.href = 'payment_success.php';
-            })
-            .catch(function(error) {
-                document.getElementById('loading-spinner').style.display = 'none';
-                document.getElementById('payment-message').className = 'alert alert-danger mt-3';
-                document.getElementById('payment-message').style.display = 'block';
-                document.getElementById('payment-message').textContent = 'Erreur de capture: ' + error.message;
-                console.error('PayPal capture error:', error);
-                throw error;
-            });
-        },
-        
-        onError: function(err) {
-            document.getElementById('loading-spinner').style.display = 'none';
-            document.getElementById('payment-message').className = 'alert alert-danger mt-3';
-            document.getElementById('payment-message').style.display = 'block';
-            document.getElementById('payment-message').textContent = 'Erreur PayPal: ' + (err.message || 'Une erreur est survenue lors du paiement. Veuillez réessayer.');
-            console.error('PayPal error:', err);
-            debugLog('PayPal Error', err);
-        },
-
-        onCancel: function(data) {
-            document.getElementById('loading-spinner').style.display = 'none';
-            document.getElementById('payment-message').className = 'alert alert-warning mt-3';
-            document.getElementById('payment-message').style.display = 'block';
-            document.getElementById('payment-message').textContent = 'Paiement annulé par l\'utilisateur';
-            debugLog('Payment Cancelled', data);
-        }
-    }).render('#paypal-button-container');
-    </script>
-<?php endif; ?>
 
 <style>
 .cart-container {
@@ -496,6 +370,11 @@ include 'includes/header.php';
     margin-bottom: 1rem;
 }
 
+.btn-block {
+    display: block;
+    width: 100%;
+}
+
 @media (max-width: 768px) {
     .match-info {
         flex-direction: column;
@@ -525,6 +404,12 @@ include 'includes/header.php';
 </style>
 
 <script>
+function handleImageError(element) {
+    if (element.dataset.type === 'team') {
+        element.src = 'assets/images/default-team.png';
+    }
+}
+
 function updateQuantity(itemId, delta) {
     const form = document.getElementById('quantity-form-' + itemId);
     const input = document.getElementById('quantity-' + itemId);
@@ -539,5 +424,3 @@ function updateQuantity(itemId, delta) {
 </script>
 
 <?php include 'includes/footer.php'; ?>
-</body>
-</html>

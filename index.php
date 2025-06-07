@@ -90,10 +90,10 @@ $upcomingMatches = $matchObj->getAllMatches(6);
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="icon-shield"></i>
+                        <i class="bi bi-shield-check"></i>
                     </div>
                     <h3 class="feature-title">Paiement sécurisé</h3>
-                    <p class="feature-description">Transactions 100% sécurisées avec PayPal</p>
+                    <p class="feature-description">Transactions 100% sécurisées</p>
                 </div>
                 
                 <div class="feature-card">

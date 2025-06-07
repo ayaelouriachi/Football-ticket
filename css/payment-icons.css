@@ -1,0 +1,25 @@
+/* Payment Icons */
+.payment-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-block;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.icon-visa {
+    background-image: url('../assets/images/visa.png');
+}
+
+.icon-mastercard {
+    background-image: url('../assets/images/mastercard.png');
+}
+
+.icon-paypal {
+    background-image: url('../assets/images/paypal.png');
+}
+
+.icon-secure {
+    background-image: url('../assets/images/secure.png');
+} 
