@@ -6,6 +6,10 @@ require_once 'includes/auth_check.php';
 $pageTitle = "Users Management";
 require_once 'includes/header.php';
 
+// Obtenir la connexion à la base de données
+$db = Database::getInstance();
+$conn = $db->getConnection();
+
 $user = new User($conn);
 $totalUsers = $user->getTotalUsers();
 $activeUsers = $user->getActiveUsers();

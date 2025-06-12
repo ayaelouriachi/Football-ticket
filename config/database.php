@@ -2,26 +2,9 @@
 // Database configuration
 require_once dirname(__FILE__) . '/constants.php';
 
-try {
-    $db = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
-        ]
-    );
-} catch (PDOException $e) {
-    error_log("Database connection failed: " . $e->getMessage());
-    die("Could not connect to the database. Please try again later.");
-}
-
 class Database {
     private static $instance = null;
-    private $connection;
+    private static $connection = null;
     
     // Configuration environnement
     private $config = [
@@ -56,23 +39,25 @@ class Database {
     ];
     
     private function __construct() {
-        $env = $_ENV['APP_ENV'] ?? 'development';
-        $config = $this->config[$env];
-        
-        $dsn = "mysql:host={$config['host']};dbname={$config['database']};charset={$config['charset']}";
-        
-        try {
-            $this->connection = new PDO($dsn, $config['username'], $config['password'], $config['options']);
+        if (self::$connection === null) {
+            $env = $_ENV['APP_ENV'] ?? 'development';
+            $config = $this->config[$env];
             
-            // Log des connexions en développement
-            if ($env === 'development') {
-                error_log("Database connected successfully at " . date('Y-m-d H:i:s'));
+            $dsn = "mysql:host={$config['host']};dbname={$config['database']};charset={$config['charset']}";
+            
+            try {
+                self::$connection = new PDO($dsn, $config['username'], $config['password'], $config['options']);
+                
+                // Log des connexions en développement
+                if ($env === 'development') {
+                    error_log("Database connected successfully at " . date('Y-m-d H:i:s'));
+                }
+                
+            } catch (PDOException $e) {
+                // Log l'erreur sans exposer les détails sensibles
+                error_log("Database connection failed: " . $e->getMessage());
+                throw new PDOException("Erreur de connexion à la base de données");
             }
-            
-        } catch (PDOException $e) {
-            // Log l'erreur sans exposer les détails sensibles
-            error_log("Database connection failed: " . $e->getMessage());
-            throw new PDOException("Erreur de connexion à la base de données");
         }
     }
     
@@ -84,26 +69,26 @@ class Database {
     }
     
     public function getConnection() {
-        return $this->connection;
+        return self::$connection;
     }
     
     // Méthode pour les transactions
     public function beginTransaction() {
-        return $this->connection->beginTransaction();
+        return self::$connection->beginTransaction();
     }
     
     public function commit() {
-        return $this->connection->commit();
+        return self::$connection->commit();
     }
     
     public function rollback() {
-        return $this->connection->rollback();
+        return self::$connection->rollback();
     }
     
     // Vérification de la connexion
     public function isConnected() {
         try {
-            $this->connection->query('SELECT 1');
+            self::$connection->query('SELECT 1');
             return true;
         } catch (PDOException $e) {
             return false;
@@ -116,4 +101,7 @@ class Database {
         throw new Exception("Cannot unserialize singleton");
     }
 }
+
+// Créer une instance globale de la connexion
+$db = Database::getInstance()->getConnection();
 ?>

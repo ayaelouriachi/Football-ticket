@@ -9,10 +9,6 @@ class User {
     private $email;
     private $name;
     private $role;
-    private $isActive;
-    private $lastLogin;
-    private $createdAt;
-    private $updatedAt;
     
     public function __construct($db) {
         $this->db = $db;
@@ -507,7 +503,7 @@ class User {
 
     public function getTotalUsers() {
         try {
-            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users");
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE role = 'user'");
             $stmt->execute();
             return $stmt->fetchColumn();
         } catch (PDOException $e) {
@@ -518,7 +514,7 @@ class User {
 
     public function getActiveUsers() {
         try {
-            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1");
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE role = 'user' AND is_active = 1");
             $stmt->execute();
             return $stmt->fetchColumn();
         } catch (PDOException $e) {
@@ -529,7 +525,7 @@ class User {
 
     public function getInactiveUsers() {
         try {
-            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 0");
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE role = 'user' AND is_active = 0");
             $stmt->execute();
             return $stmt->fetchColumn();
         } catch (PDOException $e) {
@@ -543,7 +539,8 @@ class User {
             $stmt = $this->db->prepare("
                 SELECT COUNT(DISTINCT user_id) 
                 FROM orders 
-                WHERE status = 'completed'
+                INNER JOIN users ON orders.user_id = users.id 
+                WHERE users.role = 'user'
             ");
             $stmt->execute();
             return $stmt->fetchColumn();
@@ -555,10 +552,15 @@ class User {
 
     public function getAllUsers($limit = 10, $offset = 0) {
         try {
-            $sql = "SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?";
-            $stmt = $this->db->prepare($sql);
+            $stmt = $this->db->prepare("
+                SELECT id, name, email, role, is_active, last_login, created_at 
+                FROM users 
+                WHERE role = 'user'
+                ORDER BY created_at DESC 
+                LIMIT ? OFFSET ?
+            ");
             $stmt->execute([$limit, $offset]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return $stmt->fetchAll();
         } catch (PDOException $e) {
             error_log("Get all users error: " . $e->getMessage());
             return [];
@@ -569,9 +571,8 @@ class User {
         try {
             $stmt = $this->db->prepare("
                 UPDATE users 
-                SET is_active = ?, 
-                    updated_at = NOW() 
-                WHERE id = ?
+                SET is_active = ?, updated_at = NOW() 
+                WHERE id = ? AND role = 'user'
             ");
             return $stmt->execute([$isActive, $id]);
         } catch (PDOException $e) {
@@ -586,10 +587,12 @@ class User {
             $stmt = $this->db->prepare("SELECT COUNT(*) FROM orders WHERE user_id = ?");
             $stmt->execute([$id]);
             if ($stmt->fetchColumn() > 0) {
-                throw new Exception("Cannot delete user with existing orders");
+                // Si l'utilisateur a des commandes, on le désactive au lieu de le supprimer
+                return $this->updateUserStatus($id, 0);
             }
-
-            $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
+            
+            // Si pas de commandes, on peut supprimer l'utilisateur
+            $stmt = $this->db->prepare("DELETE FROM users WHERE id = ? AND role = 'user'");
             return $stmt->execute([$id]);
         } catch (PDOException $e) {
             error_log("Delete user error: " . $e->getMessage());

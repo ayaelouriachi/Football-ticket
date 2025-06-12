@@ -8,23 +8,30 @@ if (!class_exists('AdminAuth')) {
     require_once(__DIR__ . '/auth.php');
 }
 
-if (!defined('ADMIN_UPLOAD_DIR')) {
-    require_once(__DIR__ . '/config.php');
-}
+// S'assurer que config.php est inclus
+require_once(__DIR__ . '/config.php');
 
 // Initialize auth if not already done
 if (!isset($auth)) {
-    $auth = new AdminAuth($db, $_SESSION);
+    $auth = new AdminAuth();
 }
 
 // Check authentication
-$auth->requireLogin();
+if (!$auth->isLoggedIn()) {
+    header('Location: ' . dirname($_SERVER['PHP_SELF']) . '/login.php');
+    exit;
+}
 
 // Get current user
-$currentUser = $auth->getCurrentUser();
+$currentUser = $auth->getCurrentAdmin();
 
 // Get current page for menu highlighting
 $currentPage = basename($_SERVER['PHP_SELF']);
+
+// Vérifier si ADMIN_MENU est défini
+if (!defined('ADMIN_MENU')) {
+    die('Erreur : ADMIN_MENU n\'est pas défini. Vérifiez le fichier config.php');
+}
 
 /**
  * Check if a menu item should be displayed based on user permissions
@@ -308,9 +315,21 @@ function renderMenuItem($key, $item, $currentPage) {
         
         <div class="sidebar-content">
             <ul class="nav flex-column">
-                <?php foreach (ADMIN_MENU as $key => $item): ?>
-                    <?php echo renderMenuItem($key, $item, $currentPage); ?>
-                <?php endforeach; ?>
+                <?php
+                // Debug: Afficher le contenu de ADMIN_MENU
+                if (empty(ADMIN_MENU)) {
+                    echo '<li class="nav-item"><div class="alert alert-danger">ADMIN_MENU est vide</div></li>';
+                }
+                
+                foreach (ADMIN_MENU as $key => $item): 
+                    $renderedItem = renderMenuItem($key, $item, $currentPage);
+                    if (empty($renderedItem)) {
+                        echo "<!-- Menu item '$key' non affiché - Permissions insuffisantes -->\n";
+                    } else {
+                        echo $renderedItem;
+                    }
+                endforeach; 
+                ?>
             </ul>
         </div>
     </nav>
