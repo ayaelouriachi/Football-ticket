@@ -182,16 +182,25 @@ class Cart {
     public function getCartContents() {
         try {
             $stmt = $this->db->prepare("
-                SELECT ci.*, tc.name as category_name, tc.name, 
-                       m.title as match_title, m.match_date,
-                       t1.name as team1_name, t2.name as team2_name,
-                       t1.logo as team1_logo, t2.logo as team2_logo,
-                       s.name as stadium_name
+                SELECT 
+                    ci.id,
+                    ci.ticket_category_id,
+                    ci.quantity,
+                    ci.price,
+                    (ci.quantity * ci.price) as subtotal,
+                    tc.name as category_name,
+                    m.title as match_title,
+                    m.match_date,
+                    t1.name as team1_name,
+                    t2.name as team2_name,
+                    t1.logo as team1_logo,
+                    t2.logo as team2_logo,
+                    s.name as stadium_name
                 FROM {$this->table} ci
                 JOIN ticket_categories tc ON ci.ticket_category_id = tc.id
                 JOIN matches m ON tc.match_id = m.id
-                JOIN teams t1 ON m.team1_id = t1.id
-                JOIN teams t2 ON m.team2_id = t2.id
+                JOIN teams t1 ON m.home_team_id = t1.id
+                JOIN teams t2 ON m.away_team_id = t2.id
                 JOIN stadiums s ON m.stadium_id = s.id
                 WHERE ci.user_id = ? OR ci.session_id = ?
                 ORDER BY ci.added_at DESC
@@ -201,24 +210,15 @@ class Cart {
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             $total = 0;
-            $count = 0;
-            
             foreach ($items as &$item) {
-                // Remove expired items
-                if (strtotime($item['match_date']) < time()) {
-                    $this->removeItem($item['ticket_category_id']);
-                    continue;
-                }
-                
-                $item['subtotal'] = $item['price'] * $item['quantity'];
+                $item['subtotal'] = $item['quantity'] * $item['price'];
                 $total += $item['subtotal'];
-                $count += $item['quantity'];
             }
             
             return [
                 'items' => $items,
                 'total' => $total,
-                'count' => $count
+                'count' => count($items)
             ];
             
         } catch (Exception $e) {
@@ -226,8 +226,7 @@ class Cart {
             return [
                 'items' => [],
                 'total' => 0,
-                'count' => 0,
-                'error' => $e->getMessage()
+                'count' => 0
             ];
         }
     }
@@ -325,6 +324,25 @@ class Cart {
             error_log("Transfer cart error: " . $e->getMessage());
             return false;
         }
+    }
+
+    private function getMatchDetails($matchId) {
+        $sql = "SELECT 
+            m.*,
+            t1.name as home_team,
+            t1.logo as home_team_logo,
+            t2.name as away_team,
+            t2.logo as away_team_logo,
+            s.name as stadium
+        FROM matches m
+        JOIN teams t1 ON m.home_team_id = t1.id
+        JOIN teams t2 ON m.away_team_id = t2.id
+        JOIN stadiums s ON m.stadium_id = s.id
+        WHERE m.id = ?";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$matchId]);
+        return $stmt->fetch();
     }
 }
 ?>

@@ -45,7 +45,8 @@ if (!defined('APP_NAME')) {
 
     // Configuration PayPal
     define('PAYPAL_ENVIRONMENT', APP_ENV === 'production' ? 'live' : 'sandbox');
-    define('PAYPAL_CURRENCY', 'MAD');
+    define('PAYPAL_CLIENT_ID', 'AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn');
+    define('PAYPAL_CURRENCY', 'EUR');
 
     // Configuration email
     define('MAIL_FROM', 'noreply@footballtickets.ma');

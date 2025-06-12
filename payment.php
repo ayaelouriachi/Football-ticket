@@ -319,7 +319,7 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- PayPal Script -->
-    <script src="https://www.paypal.com/sdk/js?client-id=AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn&currency=EUR"></script>
+    <script src="https://www.paypal.com/sdk/js?client-id=<?php echo PAYPAL_CLIENT_ID; ?>&currency=<?php echo PAYPAL_CURRENCY; ?>"></script>
 
     <script>
         // Get URL parameters
@@ -328,9 +328,8 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
         // Configuration
         const config = {
             amount: parseFloat(urlParams.get('amount')) || 50, // Default to 50 if not provided
-            currency: 'EUR',
+            currency: '<?php echo PAYPAL_CURRENCY; ?>',
             description: urlParams.get('description') || 'Achat de billets',
-            clientId: 'AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn',
             isAuthenticated: <?php echo isLoggedIn() ? 'true' : 'false'; ?>,
             loginUrl: '<?php echo BASE_URL; ?>pages/login.php'
         };
@@ -370,7 +369,7 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
         // Helper functions
         function updateUI() {
             // Update amounts
-            elements.amountDH.textContent = `${(config.amount * 10).toFixed(0)} DH`;
+            elements.amountDH.textContent = `${(config.amount * 10).toFixed(2)} DH`;
             elements.amountEUR.textContent = `${config.amount.toFixed(2)} ${config.currency}`;
 
             // Update loading state

@@ -13,7 +13,7 @@ class FootballMatch {
     public function getAllMatches($page = 1, $limit = 10, $filters = []) {
         try {
             $offset = ($page - 1) * $limit;
-            $where = "WHERE 1=1";
+            $where = "WHERE m.match_date > NOW()";
             $params = [];
 
             // Filtre par compétition
@@ -36,12 +36,12 @@ class FootballMatch {
                            COUNT(tc.id) as categories_count,
                            MIN(tc.price) as min_price
                     FROM {$this->table} m
-                    LEFT JOIN teams t1 ON m.team1_id = t1.id
-                    LEFT JOIN teams t2 ON m.team2_id = t2.id
+                    LEFT JOIN teams t1 ON m.home_team_id = t1.id
+                    LEFT JOIN teams t2 ON m.away_team_id = t2.id
                     LEFT JOIN stadiums s ON m.stadium_id = s.id
                     LEFT JOIN ticket_categories tc ON m.id = tc.match_id
                     {$where}
-                    GROUP BY m.id, m.competition, m.match_date, m.team1_id, m.team2_id, m.stadium_id,
+                    GROUP BY m.id, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
                              t1.name, t1.logo, t2.name, t2.logo, s.name, s.city
                     ORDER BY m.match_date ASC
                     LIMIT ? OFFSET ?";
@@ -68,8 +68,8 @@ class FootballMatch {
                            t2.name as away_team_name, t2.logo as away_team_logo,
                            s.name as stadium_name, s.city as stadium_city, s.capacity, s.address
                     FROM {$this->table} m
-                    LEFT JOIN teams t1 ON m.team1_id = t1.id
-                    LEFT JOIN teams t2 ON m.team2_id = t2.id
+                    LEFT JOIN teams t1 ON m.home_team_id = t1.id
+                    LEFT JOIN teams t2 ON m.away_team_id = t2.id
                     LEFT JOIN stadiums s ON m.stadium_id = s.id
                     WHERE m.id = ?";
             
@@ -99,8 +99,8 @@ class FootballMatch {
                            s.name as stadium_name, s.city as stadium_city,
                            COUNT(tc.id) as categories_count
                     FROM {$this->table} m
-                    LEFT JOIN teams t1 ON m.team1_id = t1.id
-                    LEFT JOIN teams t2 ON m.team2_id = t2.id
+                    LEFT JOIN teams t1 ON m.home_team_id = t1.id
+                    LEFT JOIN teams t2 ON m.away_team_id = t2.id
                     LEFT JOIN stadiums s ON m.stadium_id = s.id
                     LEFT JOIN ticket_categories tc ON m.id = tc.match_id
                     WHERE m.match_date > NOW() AND m.competition = ?

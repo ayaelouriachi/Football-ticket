@@ -13,23 +13,27 @@ $totalMatches = $stmt->fetch()['total'];
 $stmt = $db->query("SELECT COUNT(*) as future FROM matches WHERE match_date > NOW()");
 $futureMatches = $stmt->fetch()['future'];
 
-// 2. Requête corrigée avec team1_id et team2_id
+// 2. Requête corrigée avec home_team_id et away_team_id
 $stmt = $db->query("
     SELECT m.*, m.competition,
            t1.name as home_team_name, t1.logo as home_team_logo,
            t2.name as away_team_name, t2.logo as away_team_logo,
-           s.name as stadium_name, s.city as stadium_city,
-           COUNT(tc.id) as categories_count,
-           MIN(tc.price) as min_price
+           s.name as stadium_name,
+           COUNT(DISTINCT o.id) as order_count,
+           SUM(oi.quantity) as tickets_sold,
+           (SELECT SUM(tc.capacity) FROM ticket_categories tc WHERE tc.match_id = m.id) as total_capacity,
+           (SELECT MIN(tc.price) FROM ticket_categories tc WHERE tc.match_id = m.id) as min_price
     FROM matches m
-    LEFT JOIN teams t1 ON m.team1_id = t1.id
-    LEFT JOIN teams t2 ON m.team2_id = t2.id
+    LEFT JOIN teams t1 ON m.home_team_id = t1.id
+    LEFT JOIN teams t2 ON m.away_team_id = t2.id
     LEFT JOIN stadiums s ON m.stadium_id = s.id
-    LEFT JOIN ticket_categories tc ON m.id = tc.match_id
+    LEFT JOIN ticket_categories tc ON tc.match_id = m.id
+    LEFT JOIN order_items oi ON oi.ticket_category_id = tc.id
+    LEFT JOIN orders o ON o.id = oi.order_id
     WHERE m.match_date > NOW()
-    GROUP BY m.id, m.competition, m.match_date, m.team1_id, m.team2_id, m.stadium_id,
-             t1.name, t1.logo, t2.name, t2.logo, s.name, s.city
-    ORDER BY m.match_date ASC
+    GROUP BY m.id, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
+             t1.name, t1.logo, t2.name, t2.logo, s.name
+    ORDER BY m.match_date DESC
     LIMIT 10
 ");
 $testResults = $stmt->fetchAll();
@@ -150,10 +154,23 @@ require_once 'includes/header.php';
             </div>
             <?php else: ?>
             <?php foreach ($matches as $match): ?>
-            <div class="match-card-horizontal">
-                <div class="match-date-badge">
-                    <div class="day"><?= date('d', strtotime($match['match_date'])) ?></div>
-                    <div class="month"><?= date('M', strtotime($match['match_date'])) ?></div>
+            <div class="match-card">
+                <div class="teams">
+                    <div class="team home">
+                        <img src="assets/images/teams/<?= $match['home_team_id'] ?>.png" 
+                             alt="<?= htmlspecialchars($match['home_team_name']) ?>"
+                             class="team-logo"
+                             onerror="this.src='assets/images/default-team.png'">
+                        <h3><?= htmlspecialchars($match['home_team_name']) ?></h3>
+                    </div>
+                    <div class="vs">VS</div>
+                    <div class="team away">
+                        <img src="assets/images/teams/<?= $match['away_team_id'] ?>.png"
+                             alt="<?= htmlspecialchars($match['away_team_name']) ?>"
+                             class="team-logo"
+                             onerror="this.src='assets/images/default-team.png'">
+                        <h3><?= htmlspecialchars($match['away_team_name']) ?></h3>
+                    </div>
                 </div>
                 
                 <div class="match-content">
@@ -162,29 +179,9 @@ require_once 'includes/header.php';
                         <span class="match-time"><?= date('H:i', strtotime($match['match_date'])) ?></span>
                     </div>
                     
-                    <div class="teams-row">
-                        <div class="team">
-                            <img src="assets/images/teams/<?= $match['team1_id'] ?>.png" 
-                                 alt="<?= htmlspecialchars($match['home_team_name'] ?? 'N/A') ?>" 
-                                 class="team-logo-small"
-                                 onerror="this.src='assets/images/default-team.png'">
-                            <span class="team-name"><?= htmlspecialchars($match['home_team_name'] ?? 'N/A') ?></span>
-                        </div>
-                        
-                        <span class="vs">vs</span>
-                        
-                        <div class="team">
-                            <img src="assets/images/teams/<?= $match['team2_id'] ?>.png" 
-                                 alt="<?= htmlspecialchars($match['away_team_name'] ?? 'N/A') ?>" 
-                                 class="team-logo-small"
-                                 onerror="this.src='assets/images/default-team.png'">
-                            <span class="team-name"><?= htmlspecialchars($match['away_team_name'] ?? 'N/A') ?></span>
-                        </div>
-                    </div>
-                    
                     <div class="match-venue">
                         <i class="icon-location"></i>
-                        <?= htmlspecialchars($match['stadium_name'] ?? 'N/A') ?>, <?= htmlspecialchars($match['stadium_city'] ?? 'N/A') ?>
+                        <?= htmlspecialchars($match['stadium_name'] ?? 'N/A') ?>
                     </div>
                 </div>
                 

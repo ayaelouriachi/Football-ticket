@@ -1,10 +1,15 @@
 <?php
-$pageTitle = "Matches Management";
-require_once('includes/header.php');
-
-// Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+$pageTitle = "Gestion des matchs";
+
+// Inclure les fichiers nécessaires
+require_once(__DIR__ . '/../config/init.php');
+require_once(__DIR__ . '/includes/config.php');
+
+// Start output buffering
+ob_start();
 
 // Get filters from query string
 $status = $_GET['status'] ?? '';
@@ -13,8 +18,6 @@ $page = max(1, intval($_GET['page'] ?? 1));
 $limit = 10;
 
 try {
-    $db = Database::getInstance()->getConnection();
-    
     // Build where clause
     $where = [];
     $params = [];
@@ -33,8 +36,8 @@ try {
     
     // Get total count
     $countSql = "SELECT COUNT(*) as total FROM matches m
-                 LEFT JOIN teams t1 ON m.team1_id = t1.id
-                 LEFT JOIN teams t2 ON m.team2_id = t2.id
+                 LEFT JOIN teams t1 ON m.home_team_id = t1.id
+                 LEFT JOIN teams t2 ON m.away_team_id = t2.id
                  LEFT JOIN stadiums s ON m.stadium_id = s.id
                  $whereClause";
     $stmt = $db->prepare($countSql);
@@ -53,8 +56,8 @@ try {
                 (SELECT COUNT(*) FROM order_items oi WHERE oi.match_id = m.id) as tickets_sold,
                 (SELECT SUM(tc.capacity) FROM ticket_categories tc WHERE tc.match_id = m.id) as total_capacity
             FROM matches m
-            LEFT JOIN teams t1 ON m.team1_id = t1.id
-            LEFT JOIN teams t2 ON m.team2_id = t2.id
+            LEFT JOIN teams t1 ON m.home_team_id = t1.id
+            LEFT JOIN teams t2 ON m.away_team_id = t2.id
             LEFT JOIN stadiums s ON m.stadium_id = s.id
             $whereClause
             ORDER BY m.match_date DESC
@@ -66,15 +69,15 @@ try {
     
 } catch (Exception $e) {
     error_log("Error fetching matches: " . $e->getMessage());
-    $error = "An error occurred while fetching matches.";
+    $error = "Une erreur s'est produite lors de la récupération des matchs.";
 }
 ?>
 
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0">Matches Management</h1>
+        <h1 class="h3 mb-0">Gestion des matchs</h1>
         <a href="matches/create.php" class="btn btn-primary">
-            <i class="bi bi-plus-circle me-2"></i>Add New Match
+            <i class="bi bi-plus-circle me-2"></i>Ajouter un match
         </a>
     </div>
     
@@ -83,24 +86,24 @@ try {
         <div class="card-body">
             <form method="get" class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label">Search</label>
+                    <label class="form-label">Rechercher</label>
                     <input type="text" name="search" class="form-control" 
                            value="<?php echo htmlspecialchars($search); ?>" 
-                           placeholder="Search teams or stadium...">
+                           placeholder="Rechercher équipes ou stade...">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Status</label>
+                    <label class="form-label">Statut</label>
                     <select name="status" class="form-select">
-                        <option value="">All Status</option>
-                        <option value="draft" <?php echo $status === 'draft' ? 'selected' : ''; ?>>Draft</option>
-                        <option value="active" <?php echo $status === 'active' ? 'selected' : ''; ?>>Active</option>
-                        <option value="completed" <?php echo $status === 'completed' ? 'selected' : ''; ?>>Completed</option>
-                        <option value="cancelled" <?php echo $status === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
+                        <option value="">Tous les statuts</option>
+                        <option value="draft" <?php echo $status === 'draft' ? 'selected' : ''; ?>>Brouillon</option>
+                        <option value="active" <?php echo $status === 'active' ? 'selected' : ''; ?>>Actif</option>
+                        <option value="completed" <?php echo $status === 'completed' ? 'selected' : ''; ?>>Terminé</option>
+                        <option value="cancelled" <?php echo $status === 'cancelled' ? 'selected' : ''; ?>>Annulé</option>
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-search me-2"></i>Filter
+                        <i class="bi bi-search me-2"></i>Filtrer
                     </button>
                 </div>
             </form>
@@ -122,10 +125,10 @@ try {
                         <tr>
                             <th>ID</th>
                             <th>Match</th>
-                            <th>Date & Time</th>
-                            <th>Stadium</th>
-                            <th>Tickets</th>
-                            <th>Status</th>
+                            <th>Date & Heure</th>
+                            <th>Stade</th>
+                            <th>Billets</th>
+                            <th>Statut</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -139,12 +142,12 @@ try {
                                         <img src="<?php echo htmlspecialchars($match['home_team_logo']); ?>" 
                                              alt="<?php echo htmlspecialchars($match['home_team']); ?>"
                                              class="team-logo me-2"
-                                             onerror="this.src='assets/img/default-team.png'">
+                                             onerror="this.src='../assets/img/default-team.png'">
                                         <span class="text-muted">vs</span>
                                         <img src="<?php echo htmlspecialchars($match['away_team_logo']); ?>" 
                                              alt="<?php echo htmlspecialchars($match['away_team']); ?>"
                                              class="team-logo ms-2"
-                                             onerror="this.src='assets/img/default-team.png'">
+                                             onerror="this.src='../assets/img/default-team.png'">
                                     </div>
                                     <div class="ms-3">
                                         <div class="fw-bold"><?php echo htmlspecialchars($match['home_team']); ?></div>
@@ -199,111 +202,61 @@ try {
                                        class="btn btn-sm btn-outline-info">
                                         <i class="bi bi-ticket-perforated"></i>
                                     </a>
-                                    <?php if ($match['status'] === 'draft'): ?>
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteMatch(<?php echo $match['id']; ?>)">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
                         <?php endforeach; ?>
-                        
-                        <?php if (empty($matches)): ?>
-                        <tr>
-                            <td colspan="7" class="text-center py-4">
-                                <div class="text-muted">
-                                    <i class="bi bi-calendar-x display-6 d-block mb-3"></i>
-                                    <h5>No Matches Found</h5>
-                                    <p class="mb-0">Try adjusting your search or filter criteria</p>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
             
             <!-- Pagination -->
             <?php if ($total > $limit): ?>
-            <div class="d-flex justify-content-between align-items-center mt-4">
-                <div class="text-muted">
-                    Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $limit, $total); ?> 
-                    of <?php echo $total; ?> matches
-                </div>
+            <div class="d-flex justify-content-center mt-4">
                 <nav aria-label="Page navigation">
-                    <ul class="pagination mb-0">
+                    <ul class="pagination">
                         <?php
                         $totalPages = ceil($total / $limit);
-                        $maxPages = 5;
-                        $startPage = max(1, min($page - floor($maxPages / 2), $totalPages - $maxPages + 1));
-                        $endPage = min($startPage + $maxPages - 1, $totalPages);
+                        $range = 2;
                         
                         // Previous page
                         if ($page > 1): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?page=<?php echo $page - 1; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
-                                <i class="bi bi-chevron-left"></i>
-                            </a>
-                        </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=<?php echo ($page - 1); ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
                         <?php endif;
                         
                         // Page numbers
-                        for ($i = $startPage; $i <= $endPage; $i++): ?>
-                        <li class="page-item <?php echo $i === $page ? 'active' : ''; ?>">
-                            <a class="page-link" href="?page=<?php echo $i; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
-                                <?php echo $i; ?>
-                            </a>
-                        </li>
+                        for ($i = max(1, $page - $range); $i <= min($totalPages, $page + $range); $i++): ?>
+                            <li class="page-item <?php echo $i === $page ? 'active' : ''; ?>">
+                                <a class="page-link" href="?page=<?php echo $i; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
+                                    <?php echo $i; ?>
+                                </a>
+                            </li>
                         <?php endfor;
                         
                         // Next page
                         if ($page < $totalPages): ?>
-                        <li class="page-item">
-                            <a class="page-link" href="?page=<?php echo $page + 1; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
-                                <i class="bi bi-chevron-right"></i>
-                            </a>
-                        </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=<?php echo ($page + 1); ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
                         <?php endif; ?>
                     </ul>
                 </nav>
             </div>
             <?php endif; ?>
-            
         </div>
     </div>
     <?php endif; ?>
 </div>
 
-<!-- Delete Match Modal -->
-<div class="modal fade" id="deleteMatchModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Delete Match</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to delete this match? This action cannot be undone.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form id="deleteMatchForm" method="post" action="matches/delete.php" class="d-inline">
-                    <input type="hidden" name="match_id" id="deleteMatchId">
-                    <button type="submit" class="btn btn-danger">Delete Match</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+<?php
+// Get the buffered content
+$content = ob_get_clean();
 
-<script>
-function deleteMatch(matchId) {
-    document.getElementById('deleteMatchId').value = matchId;
-    new bootstrap.Modal(document.getElementById('deleteMatchModal')).show();
-}
-</script>
-
-<?php require_once('includes/footer.php'); ?> 
+// Include the layout
+require_once(__DIR__ . '/includes/layout.php'); 

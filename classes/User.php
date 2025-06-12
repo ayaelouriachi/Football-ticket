@@ -475,5 +475,30 @@ class User {
             return [];
         }
     }
+
+    public function getOrderHistory() {
+        $sql = "SELECT 
+            o.*,
+            m.match_date,
+            t1.name as home_team,
+            t2.name as away_team,
+            s.name as stadium,
+            tc.name as ticket_category,
+            oi.quantity,
+            oi.price as unit_price
+        FROM orders o
+        JOIN order_items oi ON o.id = oi.order_id
+        JOIN matches m ON oi.match_id = m.id
+        JOIN teams t1 ON m.home_team_id = t1.id
+        JOIN teams t2 ON m.away_team_id = t2.id
+        JOIN stadiums s ON m.stadium_id = s.id
+        JOIN ticket_categories tc ON oi.category_id = tc.id
+        WHERE o.user_id = ?
+        ORDER BY o.created_at DESC";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$this->id]);
+        return $stmt->fetchAll();
+    }
 }
 ?>

@@ -3,234 +3,283 @@
  * Admin Authentication Functions
  */
 
-// Ensure session is initialized
-require_once(__DIR__ . '/../../config/session.php');
-SessionManager::init();
+require_once(__DIR__ . '/config.php');
+require_once(__DIR__ . '/../../includes/flash_messages.php');
 
-// Include database
-require_once(__DIR__ . '/../../config/database.php');
-
-// Constants
-define('ADMIN_SESSION_DURATION', 7200); // 2 hours in seconds
-define('ADMIN_SESSION_NAME', 'admin_session');
-define('CSRF_TOKEN_NAME', 'admin_csrf_token');
-
-/**
- * Get current admin user data
- * @return array|null Admin user data if logged in, null otherwise
- */
-function getCurrentAdmin() {
-    if (!isAdminLoggedIn()) {
-        return null;
-    }
-
-    try {
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT * FROM admin_users WHERE id = ? AND status = 'active' LIMIT 1");
-        $stmt->execute([$_SESSION['admin_id']]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        error_log("Error fetching admin user: " . $e->getMessage());
-        return null;
-    }
-}
-
-/**
- * Check if an admin user is logged in
- * @return bool
- */
-function isAdminLoggedIn(): bool {
-    if (!isset($_SESSION['admin_id']) || !isset($_SESSION['admin_last_activity'])) {
-        return false;
-    }
-
-    // Check session expiration
-    if (time() - $_SESSION['admin_last_activity'] > ADMIN_SESSION_DURATION) {
-        logoutAdmin();
-        return false;
-    }
-
-    // Update last activity time
-    $_SESSION['admin_last_activity'] = time();
-    return true;
-}
-
-/**
- * Authenticate admin user
- * @param string $email
- * @param string $password
- * @return bool
- */
-function loginAdmin(string $email, string $password): bool {
-    try {
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT * FROM admin_users WHERE email = ? AND status = 'active' LIMIT 1");
-        $stmt->execute([$email]);
-        $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($admin && password_verify($password, $admin['password'])) {
-            // Set session variables
-            $_SESSION['admin_id'] = $admin['id'];
-            $_SESSION['admin_last_activity'] = time();
-            $_SESSION['admin_csrf_token'] = bin2hex(random_bytes(32));
-
-            // Log successful login
-            logAdminActivity($admin['id'], 'login', 'Successfully logged in');
-            return true;
+class AdminAuth {
+    private $db;
+    private $session;
+    
+    const ROLE_SUPER_ADMIN = 'super_admin';
+    const ROLE_ADMIN = 'admin';
+    const ROLE_MODERATOR = 'moderator';
+    
+    const SESSION_LIFETIME = 3600; // 1 hour
+    
+    public function __construct($db) {
+        $this->db = $db;
+        $this->session = $_SESSION;
+        
+        // Start session if not already started
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
         }
-
-        return false;
-    } catch (PDOException $e) {
-        error_log("Login error: " . $e->getMessage());
-        return false;
+        
+        // Extend session lifetime on activity
+        if (isset($_SESSION['admin_id'])) {
+            $_SESSION['last_activity'] = time();
+        }
     }
-}
-
-/**
- * Log out admin user
- */
-function logoutAdmin(): void {
-    if (isset($_SESSION['admin_id'])) {
-        // Log logout activity before destroying session
-        logAdminActivity($_SESSION['admin_id'], 'logout', 'Successfully logged out');
+    
+    public function getCurrentUser() {
+        if (!$this->isLoggedIn()) {
+            return null;
+        }
+        
+        try {
+            $stmt = $this->db->prepare("
+                SELECT id, email, first_name, last_name, role, status, last_login
+                FROM admin_users 
+                WHERE id = ?
+            ");
+            $stmt->execute([$_SESSION['admin_id']]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user) {
+                $this->logout();
+                return null;
+            }
+            
+            return $user;
+        } catch (PDOException $e) {
+            error_log("Erreur lors de la récupération de l'utilisateur : " . $e->getMessage());
+            return null;
+        }
     }
-
-    // Destroy session
-    $_SESSION = array();
-    if (isset($_COOKIE[session_name()])) {
-        setcookie(session_name(), '', time() - 3600, '/');
+    
+    public function login($email, $password) {
+        try {
+            // Check for too many failed attempts
+            if ($this->isIpBlocked() || $this->isAccountBlocked($email)) {
+                throw new Exception("Trop de tentatives de connexion. Veuillez réessayer plus tard.");
+            }
+            
+            // Get user
+            $stmt = $this->db->prepare("
+                SELECT id, email, password_hash, first_name, last_name, role, status 
+                FROM admin_users 
+                WHERE email = ?
+            ");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Debug: Afficher les informations de l'utilisateur
+            error_log("Tentative de connexion pour l'email: " . $email);
+            error_log("Utilisateur trouvé: " . ($user ? "Oui" : "Non"));
+            if ($user) {
+                error_log("Status: " . $user['status']);
+                error_log("Role: " . $user['role']);
+                error_log("Password verification: " . (password_verify($password, $user['password_hash']) ? "Succès" : "Échec"));
+            }
+            
+            // Verify user exists and password is correct
+            if (!$user || !password_verify($password, $user['password_hash'])) {
+                $this->logFailedAttempt($email);
+                if (!$user) {
+                    throw new Exception("Email ou mot de passe incorrect. (Utilisateur non trouvé)");
+                } else {
+                    throw new Exception("Email ou mot de passe incorrect. (Mot de passe invalide)");
+                }
+            }
+            
+            // Check if user is active
+            if ($user['status'] !== 'active') {
+                throw new Exception("Ce compte est " . $user['status'] . ".");
+            }
+            
+            // Clear failed attempts
+            $this->clearFailedAttempts($email);
+            
+            // Update last login
+            $stmt = $this->db->prepare("
+                UPDATE admin_users 
+                SET last_login = NOW() 
+                WHERE id = ?
+            ");
+            $stmt->execute([$user['id']]);
+            
+            // Set session
+            $_SESSION['admin_id'] = $user['id'];
+            $_SESSION['admin_email'] = $user['email'];
+            $_SESSION['admin_name'] = $user['first_name'] . ' ' . $user['last_name'];
+            $_SESSION['admin_role'] = $user['role'];
+            $_SESSION['last_activity'] = time();
+            
+            // Log activity
+            $this->logActivity($user['id'], 'login', 'auth', null, 'Connexion réussie');
+            
+            return true;
+            
+        } catch (Exception $e) {
+            error_log("Erreur de connexion: " . $e->getMessage());
+            throw $e;
+        }
     }
-    session_destroy();
-}
-
-/**
- * Check if admin has required permission
- * @param string $permission
- * @return bool
- */
-function checkAdminPermission(string $permission): bool {
-    if (!isAdminLoggedIn()) {
-        return false;
+    
+    public function logout() {
+        if (isset($_SESSION['admin_id'])) {
+            $this->logActivity($_SESSION['admin_id'], 'logout', 'auth', null, 'Déconnexion');
+        }
+        
+        // Destroy session
+        session_unset();
+        session_destroy();
+        
+        // Clear session cookie
+        if (isset($_COOKIE[session_name()])) {
+            setcookie(session_name(), '', time() - 3600, '/');
+        }
     }
-
-    try {
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("
-            SELECT permissions 
-            FROM admin_users 
-            WHERE id = ? AND status = 'active'
-            LIMIT 1
-        ");
-        $stmt->execute([$_SESSION['admin_id']]);
-        $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$admin) {
+    
+    public function isLoggedIn() {
+        if (!isset($_SESSION['admin_id'])) {
             return false;
         }
-
-        $permissions = json_decode($admin['permissions'], true);
-        return is_array($permissions) && in_array($permission, $permissions);
-    } catch (PDOException $e) {
-        error_log("Permission check error: " . $e->getMessage());
-        return false;
+        
+        // Check session timeout
+        $timeout = $this->getSessionTimeout();
+        if (time() - $_SESSION['last_activity'] > $timeout) {
+            $this->logout();
+            return false;
+        }
+        
+        return true;
     }
-}
-
-/**
- * Verify CSRF token
- * @param string $token
- * @return bool
- */
-function verifyCSRFToken(string $token): bool {
-    return isset($_SESSION['admin_csrf_token']) && 
-           hash_equals($_SESSION['admin_csrf_token'], $token);
-}
-
-/**
- * Get CSRF token
- * @return string
- */
-function getCSRFToken(): string {
-    if (!isset($_SESSION['admin_csrf_token'])) {
-        $_SESSION['admin_csrf_token'] = bin2hex(random_bytes(32));
+    
+    public function requireLogin() {
+        if (!$this->isLoggedIn()) {
+            $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
+            header('Location: /football_tickets/admin/login.php');
+            exit;
+        }
     }
-    return $_SESSION['admin_csrf_token'];
-}
-
-/**
- * Log admin activity
- * @param int $adminId
- * @param string $action
- * @param string $details
- * @return bool
- */
-function logAdminActivity(int $adminId, string $action, string $details): bool {
-    try {
-        $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("
-            INSERT INTO admin_activity_logs (admin_id, action, details, ip_address)
-            VALUES (?, ?, ?, ?)
+    
+    public function requireRole($roles) {
+        $this->requireLogin();
+        
+        if (!is_array($roles)) {
+            $roles = [$roles];
+        }
+        
+        if (!in_array($_SESSION['admin_role'], $roles)) {
+            $this->logActivity($_SESSION['admin_id'], 'access_denied', 'auth', null, 
+                             'Tentative d\'accès non autorisé à ' . $_SERVER['REQUEST_URI']);
+            die("Accès non autorisé.");
+        }
+    }
+    
+    public function hasPermission($permission) {
+        if (!$this->isLoggedIn()) {
+            return false;
+        }
+        
+        // Super admin has all permissions
+        if ($_SESSION['admin_role'] === self::ROLE_SUPER_ADMIN) {
+            return true;
+        }
+        
+        // Define role permissions
+        $permissions = [
+            self::ROLE_ADMIN => [
+                'manage_matches',
+                'manage_teams',
+                'manage_stadiums',
+                'manage_tickets',
+                'view_reports',
+                'manage_users'
+            ],
+            self::ROLE_MODERATOR => [
+                'view_matches',
+                'view_teams',
+                'view_stadiums',
+                'view_tickets'
+            ]
+        ];
+        
+        return isset($permissions[$_SESSION['admin_role']]) && 
+               in_array($permission, $permissions[$_SESSION['admin_role']]);
+    }
+    
+    public function requirePermission($permission) {
+        if (!$this->hasPermission($permission)) {
+            $this->logActivity($_SESSION['admin_id'], 'permission_denied', 'auth', null,
+                             'Tentative d\'accès sans permission : ' . $permission);
+            die("Permission refusée.");
+        }
+    }
+    
+    private function isIpBlocked() {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) 
+            FROM admin_failed_logins 
+            WHERE ip_address = ? 
+            AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
         ");
-        return $stmt->execute([
+        $stmt->execute([$_SERVER['REMOTE_ADDR']]);
+        return $stmt->fetchColumn() >= 5;
+    }
+    
+    private function isAccountBlocked($email) {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) 
+            FROM admin_failed_logins 
+            WHERE email = ? 
+            AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        ");
+        $stmt->execute([$email]);
+        return $stmt->fetchColumn() >= 10;
+    }
+    
+    private function logFailedAttempt($email) {
+        $stmt = $this->db->prepare("
+            INSERT INTO admin_failed_logins (email, ip_address) 
+            VALUES (?, ?)
+        ");
+        $stmt->execute([$email, $_SERVER['REMOTE_ADDR']]);
+    }
+    
+    private function clearFailedAttempts($email) {
+        $stmt = $this->db->prepare("
+            DELETE FROM admin_failed_logins 
+            WHERE email = ?
+        ");
+        $stmt->execute([$email]);
+    }
+    
+    private function logActivity($adminId, $action, $entityType = null, $entityId = null, $details = null) {
+        $stmt = $this->db->prepare("
+            INSERT INTO admin_activity_logs 
+            (admin_id, action, entity_type, entity_id, details, ip_address) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
             $adminId,
             $action,
+            $entityType,
+            $entityId,
             $details,
-            $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+            $_SERVER['REMOTE_ADDR']
         ]);
-    } catch (PDOException $e) {
-        error_log("Activity log error: " . $e->getMessage());
-        return false;
+    }
+    
+    private function getSessionTimeout() {
+        $stmt = $this->db->prepare("
+            SELECT setting_value 
+            FROM admin_settings 
+            WHERE setting_key = 'session_lifetime'
+        ");
+        $stmt->execute();
+        return (int)$stmt->fetchColumn() ?: self::SESSION_LIFETIME;
     }
 }
-
-/**
- * Set flash message for admin panel
- * @param string $type success|error|warning|info
- * @param string $message
- */
-function setAdminFlashMessage(string $type, string $message): void {
-    $_SESSION['admin_flash_type'] = $type;
-    $_SESSION['admin_flash_message'] = $message;
-}
-
-/**
- * Require admin authentication
- * If not logged in, redirect to login page
- */
-function requireAdminAuth(): void {
-    if (!isAdminLoggedIn()) {
-        header('Location: login.php');
-        exit();
-    }
-}
-
-/**
- * Hash admin password
- * @param string $password
- * @return string
- */
-function hashAdminPassword(string $password): string {
-    return password_hash($password, PASSWORD_DEFAULT, ['cost' => 12]);
-}
-
-/**
- * Validate admin email
- * @param string $email
- * @return bool
- */
-function validateAdminEmail(string $email): bool {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
-}
-
-/**
- * Validate admin password
- * @param string $password
- * @return bool
- */
-function validateAdminPassword(string $password): bool {
-    // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
-    return strlen($password) >= 8 &&
-           preg_match('/[A-Z]/', $password) &&
-           preg_match('/[a-z]/', $password) &&
-           preg_match('/[0-9]/', $password);
-} 
+?> 

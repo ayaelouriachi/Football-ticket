@@ -1,86 +1,177 @@
 <?php
-// Disable output buffering
-ob_end_clean();
+require_once(__DIR__ . '/../includes/config.php');
 
-// Set error reporting
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// Set page title
+$pageTitle = "Installation de l'administration - TicketFoot";
 
-// Define BASE_URL for CLI
-if (!defined('BASE_URL')) {
-    define('BASE_URL', 'http://localhost/football_tickets/');
+// Check if already installed
+try {
+    $stmt = $adminDb->prepare("SELECT COUNT(*) FROM admin_users");
+    $stmt->execute();
+    
+    if ($stmt->fetchColumn() > 0) {
+        die("L'administration est déjà installée !");
+    }
+} catch (PDOException $e) {
+    // Tables don't exist yet, continue with installation
 }
 
-require_once(__DIR__ . '/../../config/database.php');
-
 try {
-    $db = Database::getInstance()->getConnection();
+    // Read SQL file
+    $sql = file_get_contents(__DIR__ . '/../sql/admin_tables.sql');
     
-    echo "Starting admin system installation...\n";
-    
-    // Disable foreign key checks
-    $db->exec("SET FOREIGN_KEY_CHECKS = 0");
-    
-    // Drop existing tables if they exist
-    $db->exec("DROP TABLE IF EXISTS `system_logs`");
-    $db->exec("DROP TABLE IF EXISTS `admin_users`");
-    
-    // Re-enable foreign key checks
-    $db->exec("SET FOREIGN_KEY_CHECKS = 1");
-    
-    echo "Creating admin tables...\n";
-    
-    // Create admin_users table
-    $db->exec("
-        CREATE TABLE IF NOT EXISTS admin_users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(255) NOT NULL UNIQUE,
-            password VARCHAR(255) NOT NULL,
-            name VARCHAR(100) NOT NULL,
-            role ENUM('super_admin', 'admin', 'content_manager') NOT NULL DEFAULT 'admin',
-            status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
-            last_login DATETIME,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-    echo "Created admin_users table\n";
-    
-    // Create system_logs table
-    $db->exec("
-        CREATE TABLE IF NOT EXISTS system_logs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            admin_id INT,
-            action VARCHAR(50) NOT NULL,
-            description TEXT,
-            ip_address VARCHAR(45),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (admin_id) REFERENCES admin_users(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
-    echo "Created system_logs table\n";
-    
-    // Insert default admin user
-    $db->exec("
-        INSERT INTO admin_users (email, password, name, role) VALUES (
-            'admin@ticketfoot.com',
-            '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-            'Super Admin',
-            'super_admin'
+    // Split SQL into individual statements
+    $statements = array_filter(
+        array_map(
+            function($statement) {
+                return trim($statement);
+            },
+            explode(';', $sql)
         )
+    );
+    
+    // Execute each statement
+    foreach ($statements as $statement) {
+        if (!empty($statement)) {
+            try {
+                $adminDb->exec($statement);
+            } catch (PDOException $e) {
+                // Skip if table already exists
+                if ($e->getCode() != '42S01') { // 42S01 = Table already exists
+                    throw $e;
+                }
+            }
+        }
+    }
+    
+    // Create default admin user if not exists
+    $stmt = $adminDb->prepare("SELECT COUNT(*) FROM admin_users WHERE email = ?");
+    $stmt->execute(['admin@ticketfoot.com']);
+    
+    if ($stmt->fetchColumn() == 0) {
+        $stmt = $adminDb->prepare("
+            INSERT INTO admin_users (email, password_hash, first_name, last_name, role) 
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        
+        $stmt->execute([
+            'admin@ticketfoot.com',
+            password_hash('admin123', PASSWORD_DEFAULT),
+            'Super',
+            'Admin',
+            'super_admin'
+        ]);
+    }
+    
+    // Insert default settings if not exists
+    $defaultSettings = [
+        ['site_name', 'Football Tickets Admin', 'string'],
+        ['items_per_page', '10', 'integer'],
+        ['session_lifetime', '3600', 'integer'],
+        ['payment_mode', 'sandbox', 'string'],
+        ['paypal_client_id', 'YOUR_SANDBOX_CLIENT_ID', 'string'],
+        ['currency', 'EUR', 'string']
+    ];
+    
+    $stmt = $adminDb->prepare("
+        INSERT IGNORE INTO admin_settings 
+        (setting_key, setting_value, setting_type) 
+        VALUES (?, ?, ?)
     ");
-    echo "Created default admin user\n";
     
-    echo "\nAdmin system installed successfully!\n";
-    echo "Default admin credentials:\n";
-    echo "Email: admin@ticketfoot.com\n";
-    echo "Password: password\n";
-    echo "\nPlease change these credentials after first login.\n";
+    foreach ($defaultSettings as $setting) {
+        $stmt->execute($setting);
+    }
     
-} catch (PDOException $e) {
-    echo "Error installing admin system: " . $e->getMessage() . "\n";
-    exit(1);
+    // Success message
+    $success = true;
+    $message = "Installation réussie ! Vous pouvez maintenant vous connecter avec les identifiants suivants :<br>
+                Email : admin@ticketfoot.com<br>
+                Mot de passe : admin123";
+    
 } catch (Exception $e) {
-    echo "General error: " . $e->getMessage() . "\n";
-    exit(1);
-} 
+    $success = false;
+    $message = $e->getMessage();
+}
+?>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo $pageTitle; ?></title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="../../css/admin.css" rel="stylesheet">
+    
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--content-bg);
+        }
+        
+        .install-container {
+            width: 100%;
+            max-width: 600px;
+            padding: 2rem;
+        }
+        
+        .install-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .install-header img {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="install-container">
+        <div class="install-header">
+            <img src="../../assets/images/logo.png" alt="TicketFoot">
+            <h1 class="text-white">Installation de l'administration</h1>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <?php if ($success): ?>
+                    <div class="text-center">
+                        <i class="bi bi-check-circle text-success" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3 mb-4">Installation réussie !</h4>
+                        <div class="alert alert-info">
+                            <?php echo $message; ?>
+                        </div>
+                        <a href="../login.php" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Se connecter
+                        </a>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center">
+                        <i class="bi bi-x-circle text-danger" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3 mb-4">Erreur d'installation</h4>
+                        <div class="alert alert-danger">
+                            <?php echo $message; ?>
+                        </div>
+                        <button class="btn btn-primary" onclick="window.location.reload()">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Réessayer
+                        </button>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
