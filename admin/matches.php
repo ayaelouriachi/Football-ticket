@@ -18,6 +18,14 @@ $page = max(1, intval($_GET['page'] ?? 1));
 $limit = 10;
 
 try {
+    // Vérifier la connexion à la base de données
+    if (!$db || !($db instanceof PDO)) {
+        throw new Exception("La connexion à la base de données n'est pas établie.");
+    }
+
+    // Log début de la requête
+    error_log("[Admin Matches] Début de la récupération des matches");
+    
     // Build where clause
     $where = [];
     $params = [];
@@ -34,17 +42,33 @@ try {
     
     $whereClause = $where ? "WHERE " . implode(" AND ", $where) : "";
     
-    // Get total count
+    // Vérifier si la table matches existe
+    try {
+        $checkTable = $db->query("SHOW TABLES LIKE 'matches'");
+        if ($checkTable->rowCount() === 0) {
+            throw new Exception("La table 'matches' n'existe pas dans la base de données.");
+        }
+    } catch (PDOException $e) {
+        throw new Exception("Erreur lors de la vérification de la table: " . $e->getMessage());
+    }
+    
+    // Get total count with error handling
     $countSql = "SELECT COUNT(*) as total FROM matches m
                  LEFT JOIN teams t1 ON m.home_team_id = t1.id
                  LEFT JOIN teams t2 ON m.away_team_id = t2.id
                  LEFT JOIN stadiums s ON m.stadium_id = s.id
                  $whereClause";
-    $stmt = $db->prepare($countSql);
-    $stmt->execute($params);
-    $total = $stmt->fetch()['total'];
+                 
+    try {
+        $stmt = $db->prepare($countSql);
+        $stmt->execute($params);
+        $total = $stmt->fetch()['total'];
+        error_log("[Admin Matches] Nombre total de matches trouvés: " . $total);
+    } catch (PDOException $e) {
+        throw new Exception("Erreur lors du comptage des matches: " . $e->getMessage());
+    }
     
-    // Get matches
+    // Get matches with error handling
     $offset = ($page - 1) * $limit;
     $sql = "SELECT 
                 m.*,
@@ -53,8 +77,8 @@ try {
                 t2.name as away_team,
                 t2.logo as away_team_logo,
                 s.name as stadium,
-                (SELECT COUNT(*) FROM order_items oi WHERE oi.match_id = m.id) as tickets_sold,
-                (SELECT SUM(tc.capacity) FROM ticket_categories tc WHERE tc.match_id = m.id) as total_capacity
+                (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN ticket_categories tc ON oi.ticket_category_id = tc.id WHERE tc.match_id = m.id) as tickets_sold,
+                (SELECT COALESCE(SUM(tc.capacity), 0) FROM ticket_categories tc WHERE tc.match_id = m.id) as total_capacity
             FROM matches m
             LEFT JOIN teams t1 ON m.home_team_id = t1.id
             LEFT JOIN teams t2 ON m.away_team_id = t2.id
@@ -62,14 +86,20 @@ try {
             $whereClause
             ORDER BY m.match_date DESC
             LIMIT ? OFFSET ?";
-    
-    $stmt = $db->prepare($sql);
-    $stmt->execute(array_merge($params, [$limit, $offset]));
-    $matches = $stmt->fetchAll();
+            
+    try {
+        $stmt = $db->prepare($sql);
+        $stmt->execute(array_merge($params, [$limit, $offset]));
+        $matches = $stmt->fetchAll();
+        error_log("[Admin Matches] Nombre de matches récupérés: " . count($matches));
+    } catch (PDOException $e) {
+        throw new Exception("Erreur lors de la récupération des matches: " . $e->getMessage());
+    }
     
 } catch (Exception $e) {
-    error_log("Error fetching matches: " . $e->getMessage());
-    $error = "Une erreur s'est produite lors de la récupération des matchs.";
+    error_log("[Admin Matches] Erreur: " . $e->getMessage());
+    error_log("[Admin Matches] Trace: " . $e->getTraceAsString());
+    $error = "Une erreur s'est produite lors de la récupération des matchs: " . $e->getMessage();
 }
 ?>
 

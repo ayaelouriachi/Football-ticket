@@ -12,6 +12,9 @@ class FootballMatch {
     // Obtenir tous les matchs avec pagination et filtres
     public function getAllMatches($page = 1, $limit = 10, $filters = []) {
         try {
+            error_log("Starting getAllMatches with page: $page, limit: $limit");
+            error_log("Filters: " . json_encode($filters));
+            
             $offset = ($page - 1) * $limit;
             $where = "WHERE m.match_date > NOW()";
             $params = [];
@@ -20,6 +23,7 @@ class FootballMatch {
             if (!empty($filters['competition'])) {
                 $where .= " AND m.competition = ?";
                 $params[] = $filters['competition'];
+                error_log("Added competition filter: " . $filters['competition']);
             }
 
             // Filtre par équipe
@@ -27,24 +31,30 @@ class FootballMatch {
                 $where .= " AND (t1.name LIKE ? OR t2.name LIKE ?)";
                 $params[] = "%{$filters['team']}%";
                 $params[] = "%{$filters['team']}%";
+                error_log("Added team filter: " . $filters['team']);
             }
 
-            $sql = "SELECT m.*, m.competition,
+            $sql = "SELECT m.*, 
                            t1.name as home_team_name, t1.logo as home_team_logo,
                            t2.name as away_team_name, t2.logo as away_team_logo,
                            s.name as stadium_name, s.city as stadium_city,
-                           COUNT(tc.id) as categories_count,
-                           MIN(tc.price) as min_price
+                           COUNT(DISTINCT tc.id) as categories_count,
+                           MIN(tc.price) as min_price,
+                           COALESCE(SUM(DISTINCT oi.quantity), 0) as tickets_sold
                     FROM {$this->table} m
                     LEFT JOIN teams t1 ON m.home_team_id = t1.id
                     LEFT JOIN teams t2 ON m.away_team_id = t2.id
                     LEFT JOIN stadiums s ON m.stadium_id = s.id
-                    LEFT JOIN ticket_categories tc ON m.id = tc.match_id
+                    LEFT JOIN ticket_categories tc ON tc.match_id = m.id
+                    LEFT JOIN order_items oi ON oi.ticket_category_id = tc.id
                     {$where}
-                    GROUP BY m.id, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
+                    GROUP BY m.id, m.title, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
                              t1.name, t1.logo, t2.name, t2.logo, s.name, s.city
                     ORDER BY m.match_date ASC
                     LIMIT ? OFFSET ?";
+
+            error_log("SQL Query: " . $sql);
+            error_log("Parameters: " . json_encode($params));
 
             $params[] = $limit;
             $params[] = $offset;
@@ -52,11 +62,16 @@ class FootballMatch {
             $stmt = $this->db->prepare($sql);
             $stmt->execute($params);
             
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            error_log("Found " . count($results) . " matches");
+            
+            return $results;
 
         } catch (PDOException $e) {
             error_log("Get matches error: " . $e->getMessage());
-            return [];
+            error_log("Error code: " . $e->getCode());
+            error_log("Error trace: " . $e->getTraceAsString());
+            throw new Exception("Erreur lors de la récupération des matches: " . $e->getMessage());
         }
     }
     
@@ -304,15 +319,20 @@ class FootballMatch {
             $this->db->beginTransaction();
             
             // Vérifier s'il y a des commandes associées
-            $sql = "SELECT COUNT(*) FROM order_items oi 
-                    JOIN ticket_categories tc ON oi.ticket_category_id = tc.id 
+            $sql = "SELECT COUNT(*) 
+                    FROM order_items oi 
+                    INNER JOIN ticket_categories tc ON oi.ticket_category_id = tc.id 
                     WHERE tc.match_id = ?";
+            
             $stmt = $this->db->prepare($sql);
             $stmt->execute([$id]);
             
             if ($stmt->fetchColumn() > 0) {
                 $this->db->rollback();
-                return ['success' => false, 'errors' => ['Impossible de supprimer : des commandes existent pour ce match']];
+                return [
+                    'success' => false, 
+                    'errors' => ['Impossible de supprimer : des commandes existent pour ce match']
+                ];
             }
             
             // Supprimer les catégories de billets

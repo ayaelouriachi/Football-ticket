@@ -9,6 +9,10 @@ class User {
     private $email;
     private $name;
     private $role;
+    private $isActive;
+    private $lastLogin;
+    private $createdAt;
+    private $updatedAt;
     
     public function __construct($db) {
         $this->db = $db;
@@ -488,11 +492,11 @@ class User {
             oi.price as unit_price
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
-        JOIN matches m ON oi.match_id = m.id
+        JOIN ticket_categories tc ON oi.ticket_category_id = tc.id
+        JOIN matches m ON tc.match_id = m.id
         JOIN teams t1 ON m.home_team_id = t1.id
         JOIN teams t2 ON m.away_team_id = t2.id
         JOIN stadiums s ON m.stadium_id = s.id
-        JOIN ticket_categories tc ON oi.category_id = tc.id
         WHERE o.user_id = ?
         ORDER BY o.created_at DESC";
         
@@ -500,5 +504,113 @@ class User {
         $stmt->execute([$this->id]);
         return $stmt->fetchAll();
     }
+
+    public function getTotalUsers() {
+        try {
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users");
+            $stmt->execute();
+            return $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Get total users error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getActiveUsers() {
+        try {
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1");
+            $stmt->execute();
+            return $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Get active users error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getInactiveUsers() {
+        try {
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 0");
+            $stmt->execute();
+            return $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Get inactive users error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getUsersWithOrders() {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT COUNT(DISTINCT user_id) 
+                FROM orders 
+                WHERE status = 'completed'
+            ");
+            $stmt->execute();
+            return $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Get users with orders error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getAllUsers($limit = 10, $offset = 0) {
+        try {
+            $sql = "SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$limit, $offset]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get all users error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    public function updateUserStatus($id, $isActive) {
+        try {
+            $stmt = $this->db->prepare("
+                UPDATE users 
+                SET is_active = ?, 
+                    updated_at = NOW() 
+                WHERE id = ?
+            ");
+            return $stmt->execute([$isActive, $id]);
+        } catch (PDOException $e) {
+            error_log("Update user status error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function deleteUser($id) {
+        try {
+            // Vérifier si l'utilisateur a des commandes
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM orders WHERE user_id = ?");
+            $stmt->execute([$id]);
+            if ($stmt->fetchColumn() > 0) {
+                throw new Exception("Cannot delete user with existing orders");
+            }
+
+            $stmt = $this->db->prepare("DELETE FROM users WHERE id = ?");
+            return $stmt->execute([$id]);
+        } catch (PDOException $e) {
+            error_log("Delete user error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    // Getters
+    public function getIsActive() { return $this->isActive; }
+    public function getLastLogin() { return $this->lastLogin; }
+    public function getCreatedAt() { return $this->createdAt; }
+    public function getUpdatedAt() { return $this->updatedAt; }
+
+    // Setters
+    public function setId($id) { $this->id = $id; }
+    public function setEmail($email) { $this->email = $email; }
+    public function setName($name) { $this->name = $name; }
+    public function setRole($role) { $this->role = $role; }
+    public function setIsActive($isActive) { $this->isActive = $isActive; }
+    public function setLastLogin($lastLogin) { $this->lastLogin = $lastLogin; }
+    public function setCreatedAt($createdAt) { $this->createdAt = $createdAt; }
+    public function setUpdatedAt($updatedAt) { $this->updatedAt = $updatedAt; }
 }
 ?>

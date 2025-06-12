@@ -2,106 +2,123 @@
 require_once 'config/database.php';
 require_once 'classes/Match.php';
 
-// À ajouter TEMPORAIREMENT au début de matches.php après les require
+// Initialize error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/logs/error.log');
 
-$db = Database::getInstance()->getConnection();
+try {
+    $db = Database::getInstance()->getConnection();
 
-// 1. Vérifier les matchs
-$stmt = $db->query("SELECT COUNT(*) as total FROM matches");
-$totalMatches = $stmt->fetch()['total'];
-
-$stmt = $db->query("SELECT COUNT(*) as future FROM matches WHERE match_date > NOW()");
-$futureMatches = $stmt->fetch()['future'];
-
-// 2. Requête corrigée avec home_team_id et away_team_id
-$stmt = $db->query("
-    SELECT m.*, m.competition,
-           t1.name as home_team_name, t1.logo as home_team_logo,
-           t2.name as away_team_name, t2.logo as away_team_logo,
-           s.name as stadium_name,
-           COUNT(DISTINCT o.id) as order_count,
-           SUM(oi.quantity) as tickets_sold,
-           (SELECT SUM(tc.capacity) FROM ticket_categories tc WHERE tc.match_id = m.id) as total_capacity,
-           (SELECT MIN(tc.price) FROM ticket_categories tc WHERE tc.match_id = m.id) as min_price
-    FROM matches m
-    LEFT JOIN teams t1 ON m.home_team_id = t1.id
-    LEFT JOIN teams t2 ON m.away_team_id = t2.id
-    LEFT JOIN stadiums s ON m.stadium_id = s.id
-    LEFT JOIN ticket_categories tc ON tc.match_id = m.id
-    LEFT JOIN order_items oi ON oi.ticket_category_id = tc.id
-    LEFT JOIN orders o ON o.id = oi.order_id
-    WHERE m.match_date > NOW()
-    GROUP BY m.id, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
-             t1.name, t1.logo, t2.name, t2.logo, s.name
-    ORDER BY m.match_date DESC
-    LIMIT 10
-");
-$testResults = $stmt->fetchAll();
-
-// Affichage debug
-echo "<div style='background: #f0f8ff; padding: 15px; margin: 10px; border: 2px solid #0066cc; font-family: monospace;'>";
-echo "<h3>🔍 DIAGNOSTIC DE LA BASE DE DONNÉES</h3>";
-echo "<p><strong>Total matchs:</strong> $totalMatches</p>";
-echo "<p><strong>Matchs futurs:</strong> $futureMatches</p>";
-echo "<p><strong>Résultats de la requête complète:</strong> " . count($testResults) . "</p>";
-
-if (!empty($testResults)) {
-    echo "<h4>Exemple de match trouvé:</h4>";
-    $match = $testResults[0];
-    echo "<ul>";
-    echo "<li><strong>ID:</strong> " . $match['id'] . "</li>";
-    echo "<li><strong>Date:</strong> " . $match['match_date'] . "</li>";
-    echo "<li><strong>Compétition:</strong> " . ($match['competition'] ?? 'NULL') . "</li>";
-    echo "<li><strong>Équipe domicile:</strong> " . ($match['home_team_name'] ?? 'NULL') . "</li>";
-    echo "<li><strong>Équipe visiteur:</strong> " . ($match['away_team_name'] ?? 'NULL') . "</li>";
-    echo "<li><strong>Stade:</strong> " . ($match['stadium_name'] ?? 'NULL') . "</li>";
-    echo "</ul>";
-} else {
-    echo "<p style='color: red;'><strong>❌ Aucun résultat trouvé avec la requête complète</strong></p>";
-    
-    // Test sans jointures
-    $stmt = $db->query("SELECT * FROM matches WHERE match_date > NOW() LIMIT 5");
-    $simpleResults = $stmt->fetchAll();
-    echo "<p><strong>Test sans jointures:</strong> " . count($simpleResults) . " résultats</p>";
-    
-    if (!empty($simpleResults)) {
-        echo "<p style='color: orange;'>⚠️ Les matchs existent mais il y a un problème avec les jointures</p>";
-        $match = $simpleResults[0];
-        echo "<p>Exemple: Match ID " . $match['id'] . " - Date: " . $match['match_date'] . "</p>";
+    // Test database connection
+    if (!$db->query('SELECT 1')) {
+        throw new PDOException("Database connection test failed");
     }
+
+    // 1. Vérifier les matchs
+    $stmt = $db->query("SELECT COUNT(*) as total FROM matches");
+    $totalMatches = $stmt->fetch()['total'];
+
+    $stmt = $db->query("SELECT COUNT(*) as future FROM matches WHERE match_date > NOW()");
+    $futureMatches = $stmt->fetch()['future'];
+
+    // 2. Requête corrigée avec home_team_id et away_team_id
+    $stmt = $db->query("
+        SELECT m.*, 
+               t1.name as home_team_name, t1.logo as home_team_logo,
+               t2.name as away_team_name, t2.logo as away_team_logo,
+               s.name as stadium_name,
+               COUNT(DISTINCT tc.id) as categories_count,
+               MIN(tc.price) as min_price,
+               COALESCE(SUM(DISTINCT oi.quantity), 0) as tickets_sold
+        FROM matches m
+        LEFT JOIN teams t1 ON m.home_team_id = t1.id
+        LEFT JOIN teams t2 ON m.away_team_id = t2.id
+        LEFT JOIN stadiums s ON m.stadium_id = s.id
+        LEFT JOIN ticket_categories tc ON tc.match_id = m.id
+        LEFT JOIN order_items oi ON oi.ticket_category_id = tc.id
+        WHERE m.match_date > NOW()
+        GROUP BY m.id, m.competition, m.match_date, m.home_team_id, m.away_team_id, m.stadium_id,
+                 t1.name, t1.logo, t2.name, t2.logo, s.name
+        ORDER BY m.match_date DESC
+        LIMIT 10
+    ");
+    $testResults = $stmt->fetchAll();
+
+    // Affichage debug
+    echo "<div style='background: #f0f8ff; padding: 15px; margin: 10px; border: 2px solid #0066cc; font-family: monospace;'>";
+    echo "<h3>🔍 DIAGNOSTIC DE LA BASE DE DONNÉES</h3>";
+    echo "<p><strong>Total matchs:</strong> $totalMatches</p>";
+    echo "<p><strong>Matchs futurs:</strong> $futureMatches</p>";
+    echo "<p><strong>Résultats de la requête complète:</strong> " . count($testResults) . "</p>";
+
+    if (!empty($testResults)) {
+        echo "<h4>Exemple de match trouvé:</h4>";
+        $match = $testResults[0];
+        echo "<ul>";
+        echo "<li><strong>ID:</strong> " . $match['id'] . "</li>";
+        echo "<li><strong>Date:</strong> " . $match['match_date'] . "</li>";
+        echo "<li><strong>Compétition:</strong> " . ($match['competition'] ?? 'NULL') . "</li>";
+        echo "<li><strong>Équipe domicile:</strong> " . ($match['home_team_name'] ?? 'NULL') . "</li>";
+        echo "<li><strong>Équipe visiteur:</strong> " . ($match['away_team_name'] ?? 'NULL') . "</li>";
+        echo "<li><strong>Stade:</strong> " . ($match['stadium_name'] ?? 'NULL') . "</li>";
+        echo "</ul>";
+    } else {
+        echo "<p style='color: red;'><strong>❌ Aucun résultat trouvé avec la requête complète</strong></p>";
+        
+        // Test sans jointures
+        $stmt = $db->query("SELECT * FROM matches WHERE match_date > NOW() LIMIT 5");
+        $simpleResults = $stmt->fetchAll();
+        echo "<p><strong>Test sans jointures:</strong> " . count($simpleResults) . " résultats</p>";
+        
+        if (!empty($simpleResults)) {
+            echo "<p style='color: orange;'>⚠️ Les matchs existent mais il y a un problème avec les jointures</p>";
+            $match = $simpleResults[0];
+            echo "<p>Exemple: Match ID " . $match['id'] . " - Date: " . $match['match_date'] . "</p>";
+        }
+    }
+
+    echo "</div>";
+
+    $matchObj = new FootballMatch();
+
+    // 🔍 DEBUG: Afficher les paramètres reçus
+    echo "<!-- DEBUG: GET parameters -->";
+    echo "<!-- Competition: " . ($_GET['competition'] ?? 'none') . " -->";
+
+    // Préparation des filtres
+    $filters = [];
+    $competition = $_GET['competition'] ?? '';
+
+    if ($competition) {
+        $filters['competition'] = $competition;
+        echo "<!-- DEBUG: Filter applied for competition: $competition -->";
+    }
+
+    // 🔍 DEBUG: Tester d'abord sans filtre
+    $allMatches = $matchObj->getAllMatches(1, 50, []);
+    echo "<!-- DEBUG: Total matches without filter: " . count($allMatches) . " -->";
+
+    // Récupération des matchs avec filtres
+    $matches = $matchObj->getAllMatches(1, 50, $filters);
+    echo "<!-- DEBUG: Matches with filter: " . count($matches) . " -->";
+
+    // 🔍 DEBUG: Afficher la requête SQL (temporaire)
+    if ($competition) {
+        echo "<!-- DEBUG: Looking for competition: '$competition' -->";
+    }
+
+    require_once 'includes/header.php';
+} catch (PDOException $e) {
+    error_log("Database error in matches.php: " . $e->getMessage());
+    $error_message = "Une erreur s'est produite lors de la connexion à la base de données.";
+    require_once 'includes/header.php';
+} catch (Exception $e) {
+    error_log("General error in matches.php: " . $e->getMessage());
+    $error_message = $e->getMessage();
+    require_once 'includes/header.php';
 }
-
-echo "</div>";
-
-$matchObj = new FootballMatch();
-
-// 🔍 DEBUG: Afficher les paramètres reçus
-echo "<!-- DEBUG: GET parameters -->";
-echo "<!-- Competition: " . ($_GET['competition'] ?? 'none') . " -->";
-
-// Préparation des filtres
-$filters = [];
-$competition = $_GET['competition'] ?? '';
-
-if ($competition) {
-    $filters['competition'] = $competition;
-    echo "<!-- DEBUG: Filter applied for competition: $competition -->";
-}
-
-// 🔍 DEBUG: Tester d'abord sans filtre
-$allMatches = $matchObj->getAllMatches(1, 50, []);
-echo "<!-- DEBUG: Total matches without filter: " . count($allMatches) . " -->";
-
-// Récupération des matchs avec filtres
-$matches = $matchObj->getAllMatches(1, 50, $filters);
-echo "<!-- DEBUG: Matches with filter: " . count($matches) . " -->";
-
-// 🔍 DEBUG: Afficher la requête SQL (temporaire)
-if ($competition) {
-    echo "<!-- DEBUG: Looking for competition: '$competition' -->";
-}
-
-require_once 'includes/header.php';
 ?>
 
 <main class="main-content">
@@ -110,6 +127,14 @@ require_once 'includes/header.php';
             <h1>Tous les matchs</h1>
             <p>Découvrez tous les matchs disponibles à la réservation</p>
         </div>
+
+        <?php if (isset($error_message)): ?>
+        <div class="alert alert-danger">
+            <p><?php echo htmlspecialchars($error_message); ?></p>
+            <p>Veuillez réessayer plus tard ou contacter l'administrateur si le problème persiste.</p>
+            <a href="matches.php" class="btn btn-primary mt-3">Réessayer</a>
+        </div>
+        <?php else: ?>
 
         <!-- 🔍 DEBUG INFO (à supprimer en production) -->
         <?php if (isset($_GET['debug'])): ?>
@@ -149,15 +174,17 @@ require_once 'includes/header.php';
         <div class="matches-list">
             <?php if (empty($matches)): ?>
             <div class="no-matches">
-                <p>Aucun match trouvé pour cette compétition.</p>
+                <p>Aucun match trouvé<?= $competition ? ' pour cette compétition' : '' ?>.</p>
+                <?php if ($competition): ?>
                 <a href="matches.php" class="btn btn-primary">Voir tous les matchs</a>
+                <?php endif; ?>
             </div>
             <?php else: ?>
             <?php foreach ($matches as $match): ?>
             <div class="match-card">
                 <div class="teams">
                     <div class="team home">
-                        <img src="assets/images/teams/<?= $match['home_team_id'] ?>.png" 
+                        <img src="<?= htmlspecialchars($match['home_team_logo'] ?? 'assets/images/default-team.png') ?>" 
                              alt="<?= htmlspecialchars($match['home_team_name']) ?>"
                              class="team-logo"
                              onerror="this.src='assets/images/default-team.png'">
@@ -165,7 +192,7 @@ require_once 'includes/header.php';
                     </div>
                     <div class="vs">VS</div>
                     <div class="team away">
-                        <img src="assets/images/teams/<?= $match['away_team_id'] ?>.png"
+                        <img src="<?= htmlspecialchars($match['away_team_logo'] ?? 'assets/images/default-team.png') ?>"
                              alt="<?= htmlspecialchars($match['away_team_name']) ?>"
                              class="team-logo"
                              onerror="this.src='assets/images/default-team.png'">
@@ -198,6 +225,7 @@ require_once 'includes/header.php';
             <?php endforeach; ?>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 </main>
 

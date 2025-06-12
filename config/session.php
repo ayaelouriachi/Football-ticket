@@ -9,6 +9,19 @@ class SessionManager {
         
         // Prevent headers already sent errors
         if (!headers_sent()) {
+            // Si une session est déjà active, on la détruit pour pouvoir reconfigurer
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            
+            // Configuration de la session
+            ini_set('session.use_strict_mode', 1);
+            ini_set('session.use_only_cookies', 1);
+            ini_set('session.cookie_httponly', 1);
+            ini_set('session.cookie_secure', 1);
+            ini_set('session.cookie_samesite', 'Lax');
+            ini_set('session.gc_maxlifetime', 3600);
+            
             // Configuration des cookies de session
             session_set_cookie_params([
                 'lifetime' => 0,
@@ -19,18 +32,8 @@ class SessionManager {
                 'samesite' => 'Lax'
             ]);
             
-            // Configuration de la session
-            ini_set('session.use_strict_mode', 1);
-            ini_set('session.use_only_cookies', 1);
-            ini_set('session.cookie_httponly', 1);
-            ini_set('session.cookie_secure', 1);
-            ini_set('session.cookie_samesite', 'Lax');
-            ini_set('session.gc_maxlifetime', 3600);
-            
-            // Démarrer la session si elle n'est pas déjà active
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
+            // Démarrer la session
+            session_start();
             
             self::$initialized = true;
         }

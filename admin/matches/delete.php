@@ -20,7 +20,7 @@ try {
     // Check if match exists and can be deleted
     $stmt = $db->prepare("
         SELECT m.*, 
-               (SELECT COUNT(*) FROM orders o JOIN order_items oi ON o.id = oi.order_id WHERE oi.match_id = m.id) as tickets_sold
+               (SELECT COALESCE(SUM(oi.quantity), 0) FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN ticket_categories tc ON oi.ticket_category_id = tc.id WHERE tc.match_id = m.id) as tickets_sold
         FROM matches m 
         WHERE m.id = ?
     ");
