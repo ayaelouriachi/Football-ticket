@@ -1,3 +1,53 @@
+<?php
+require_once(__DIR__ . '/config/session.php');
+require_once(__DIR__ . '/config/constants.php');
+require_once(__DIR__ . '/includes/auth_middleware.php');
+
+// Initialize session
+SessionManager::init();
+
+// Check if user is authenticated
+if (!isLoggedIn()) {
+    // Store cart data in session if available
+    if (isset($_GET['amount'])) {
+        $_SESSION['pending_payment'] = [
+            'amount' => $_GET['amount'],
+            'description' => $_GET['description'] ?? 'Achat de billets',
+            'timestamp' => time()
+        ];
+    }
+    
+    // Store the current URL to redirect back after login
+    $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
+    
+    // Set flash message
+    setFlashMessage('warning', 'Veuillez vous connecter pour continuer avec le paiement.');
+    
+    // Redirect to login page
+    header('Location: ' . BASE_URL . 'pages/login.php');
+    exit;
+}
+
+// Check if we have pending payment data and no amount in URL
+if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
+    // Check if pending payment is not expired (30 minutes)
+    if (time() - $_SESSION['pending_payment']['timestamp'] < 1800) {
+        // Reconstruct URL with pending payment data
+        $redirectUrl = $_SERVER['PHP_SELF'] . '?amount=' . $_SESSION['pending_payment']['amount'];
+        if (isset($_SESSION['pending_payment']['description'])) {
+            $redirectUrl .= '&description=' . urlencode($_SESSION['pending_payment']['description']);
+        }
+        // Clear pending payment data
+        unset($_SESSION['pending_payment']);
+        // Redirect to payment page with parameters
+        header('Location: ' . $redirectUrl);
+        exit;
+    } else {
+        // Clear expired pending payment data
+        unset($_SESSION['pending_payment']);
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -268,6 +318,9 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
+    <!-- PayPal Script -->
+    <script src="https://www.paypal.com/sdk/js?client-id=AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn&currency=EUR"></script>
+
     <script>
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -277,11 +330,15 @@
             amount: parseFloat(urlParams.get('amount')) || 50, // Default to 50 if not provided
             currency: 'EUR',
             description: urlParams.get('description') || 'Achat de billets',
-            clientId: 'AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn'
+            clientId: 'AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn',
+            isAuthenticated: <?php echo isLoggedIn() ? 'true' : 'false'; ?>,
+            loginUrl: '<?php echo BASE_URL; ?>pages/login.php'
         };
 
-        // Validate amount
-        if (isNaN(config.amount) || config.amount <= 0) {
+        // Validate amount and authentication
+        if (!config.isAuthenticated) {
+            window.location.href = config.loginUrl + '?redirect=' + encodeURIComponent(window.location.href);
+        } else if (isNaN(config.amount) || config.amount <= 0) {
             window.location.href = 'cart.php?error=' + encodeURIComponent('Montant invalide');
         }
 
@@ -290,7 +347,8 @@
             isScriptLoaded: false,
             isLoading: true,
             paymentStatus: 'idle', // 'idle' | 'processing' | 'success' | 'error'
-            errorMessage: ''
+            errorMessage: '',
+            authCheckInterval: null
         };
 
         // DOM Elements
@@ -337,37 +395,18 @@
             updateUI();
         }
 
-        // Load PayPal script
-        function loadPayPalScript() {
-            if (window.paypal) {
-                setState({ isScriptLoaded: true, isLoading: false });
-                initializePayPalButton();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = `https://www.paypal.com/sdk/js?client-id=${config.clientId}&currency=${config.currency}&intent=capture`;
-            script.async = true;
-
-            script.onload = () => {
-                setState({ isScriptLoaded: true, isLoading: false });
-                initializePayPalButton();
-            };
-
-            script.onerror = () => {
-                setState({
-                    isLoading: false,
-                    paymentStatus: 'error',
-                    errorMessage: 'Erreur lors du chargement de PayPal'
-                });
-            };
-
-            document.body.appendChild(script);
-        }
-
         // Initialize PayPal button
         function initializePayPalButton() {
-            if (!window.paypal || !elements.paypalContainer) return;
+            if (!window.paypal || !elements.paypalContainer || !config.isAuthenticated) {
+                setState({ 
+                    isLoading: false, 
+                    paymentStatus: 'error',
+                    errorMessage: !config.isAuthenticated ? 
+                        'Veuillez vous connecter pour effectuer le paiement.' : 
+                        'Erreur de chargement PayPal'
+                });
+                return;
+            }
 
             // Clear container
             elements.paypalContainer.innerHTML = '';
@@ -382,6 +421,12 @@
                 },
 
                 createOrder: (data, actions) => {
+                    // Check authentication again before creating order
+                    if (!config.isAuthenticated) {
+                        window.location.href = config.loginUrl + '?redirect=' + encodeURIComponent(window.location.href);
+                        return Promise.reject('Authentication required');
+                    }
+
                     setState({ paymentStatus: 'processing' });
 
                     return actions.order.create({
@@ -445,10 +490,56 @@
             }).render(elements.paypalContainer);
         }
 
+        // Helper functions
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('ajax/verify_auth.php', {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                const data = await response.json();
+                
+                if (!data.isAuthenticated) {
+                    // Clear auth check interval
+                    if (state.authCheckInterval) {
+                        clearInterval(state.authCheckInterval);
+                    }
+                    // Redirect to login
+                    window.location.href = data.redirectUrl;
+                }
+                
+                return data.isAuthenticated;
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+                return config.isAuthenticated; // Fall back to initial auth state
+            }
+        }
+
+        // Start periodic auth check
+        function startAuthCheck() {
+            // Initial check
+            checkAuthStatus();
+            
+            // Check every 30 seconds
+            state.authCheckInterval = setInterval(checkAuthStatus, 30000);
+        }
+
+        // Clean up on page unload
+        window.addEventListener('unload', () => {
+            if (state.authCheckInterval) {
+                clearInterval(state.authCheckInterval);
+            }
+        });
+
+        // Initialize auth check when page loads
+        document.addEventListener('DOMContentLoaded', startAuthCheck);
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
             updateUI();
-            loadPayPalScript();
+            setState({ isLoading: false }); // Hide loading immediately
+            initializePayPalButton(); // Initialize PayPal button directly
         });
     </script>
 </body>

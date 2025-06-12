@@ -1,8 +1,12 @@
 <?php
 require_once __DIR__ . '/config/init.php';
+require_once __DIR__ . '/includes/auth_middleware.php';
 
 // Initialize cart
 $cart = new Cart($db, $_SESSION);
+
+// Check if user is authenticated for payment
+$isAuthenticated = isLoggedIn();
 
 // Handle payment status and errors
 if (isset($_GET['payment_status'])) {
@@ -191,9 +195,18 @@ include 'includes/header.php';
                     </div>
                     
                     <?php if ($cart_contents['total'] > 0): ?>
-                        <a href="payment.html?amount=<?php echo number_format($cart_contents['total'] / 10, 2); ?>&description=<?php echo urlencode('Achat de billets - Réf: ' . uniqid()); ?>" class="btn btn-primary btn-block mt-4">
-                            <i class="bi bi-credit-card me-2"></i>Procéder au paiement
-                        </a>
+                        <?php if ($isAuthenticated): ?>
+                            <a href="payment.php?amount=<?php echo number_format($cart_contents['total'] / 10, 2); ?>&description=<?php echo urlencode('Achat de billets - Réf: ' . uniqid()); ?>" class="btn btn-primary btn-block mt-4">
+                                <i class="bi bi-credit-card me-2"></i>Procéder au paiement
+                            </a>
+                        <?php else: ?>
+                            <a href="pages/login.php?redirect=<?php echo urlencode($_SERVER['REQUEST_URI']); ?>" class="btn btn-primary btn-block mt-4">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Se connecter pour payer
+                            </a>
+                            <div class="text-center mt-2 text-muted small">
+                                <i class="bi bi-info-circle me-1"></i>Vous devez être connecté pour effectuer un paiement
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
