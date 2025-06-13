@@ -331,7 +331,8 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
             currency: '<?php echo PAYPAL_CURRENCY; ?>',
             description: urlParams.get('description') || 'Achat de billets',
             isAuthenticated: <?php echo isLoggedIn() ? 'true' : 'false'; ?>,
-            loginUrl: '<?php echo BASE_URL; ?>pages/login.php'
+            loginUrl: '<?php echo BASE_URL; ?>pages/login.php',
+            userId: <?php echo isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'null'; ?>
         };
 
         // Validate amount and authentication
@@ -450,6 +451,33 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
                         const order = await actions.order.capture();
                         console.log('Paiement approuvé:', order);
 
+                        // Préparation des données pour la sauvegarde
+                        const paymentData = {
+                            order_id: order.id,
+                            amount: order.purchase_units[0].amount.value,
+                            currency: order.purchase_units[0].amount.currency_code,
+                            status: order.status,
+                            transaction_id: data.paymentID || order.id,
+                            payment_method: 'paypal',
+                            gateway_response: JSON.stringify(order)
+                        };
+                        console.log('Données préparées pour PHP:', paymentData);
+
+                        // Envoi des données au serveur
+                        try {
+                            const response = await fetch('test_save_payment.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                },
+                                body: new URLSearchParams(paymentData)
+                            });
+                            const result = await response.json();
+                            console.log('Réponse du serveur PHP:', result);
+                        } catch (error) {
+                            console.error('Erreur lors de la sauvegarde:', error);
+                        }
+
                         setState({
                             paymentStatus: 'success',
                             isLoading: false
@@ -540,6 +568,39 @@ if (!isset($_GET['amount']) && isset($_SESSION['pending_payment'])) {
             setState({ isLoading: false }); // Hide loading immediately
             initializePayPalButton(); // Initialize PayPal button directly
         });
+
+        // Fonction pour envoyer les données de paiement au serveur
+        function savePayment(orderData) {
+            // Prépare les données pour correspondre à la structure de la base de données
+            const paymentData = {
+                order_id: orderData.id,  // Utilise l'ID de commande PayPal
+                payment_id: orderData.id,  // Utilise le même ID comme payment_id
+                amount: orderData.purchase_units[0].amount.value,
+                currency: orderData.purchase_units[0].amount.currency_code,
+                status: orderData.status,
+                user_id: window.currentUserId || 1  // Utilise l'ID utilisateur courant ou une valeur par défaut
+            };
+
+            // Log pour le débogage
+            console.log('Données de paiement à enregistrer:', paymentData);
+
+            // Envoie les données au serveur
+            return fetch('test_save_payment.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(paymentData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Réponse du serveur:', data);
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur lors de l\'enregistrement du paiement');
+                }
+                return data;
+            });
+        }
     </script>
 </body>
 </html>

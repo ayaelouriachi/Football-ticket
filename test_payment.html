@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tests PayPal - Diagnostic</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0070ba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #005ea6;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        .response-wrapper {
+            margin-top: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            background: #f8f9fa;
+        }
+        .response {
+            white-space: pre-wrap;
+            font-family: monospace;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .raw-response {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background: #2d2d2d;
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        .show-raw {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 0.8em;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .test-section {
+            margin-bottom: 30px;
+        }
+        .test-buttons {
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🔍 Tests de Diagnostic PayPal</h2>
+        
+        <div class="test-section">
+            <h3>1. Test PHP de Base</h3>
+            <div class="test-buttons">
+                <button type="button" onclick="testPhp()">Tester PHP</button>
+            </div>
+            <div class="response-wrapper">
+                <div class="response" id="php-response"></div>
+                <div class="raw-response" id="php-raw"></div>
+                <button type="button" class="show-raw" onclick="toggleRaw('php')">Afficher/Masquer Réponse Brute</button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Test Base de Données</h3>
+            <div class="test-buttons">
+                <button type="button" onclick="testDatabase()">Tester la BDD</button>
+                <button type="button" onclick="testDbStructure()">Vérifier Structure</button>
+            </div>
+            <div class="response-wrapper">
+                <div class="response" id="db-response"></div>
+                <div class="raw-response" id="db-raw"></div>
+                <button type="button" class="show-raw" onclick="toggleRaw('db')">Afficher/Masquer Réponse Brute</button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Test Complet de Paiement</h3>
+            <form id="paymentForm">
+                <div class="form-group">
+                    <label for="order_id">ID de commande:</label>
+                    <input type="number" id="order_id" name="order_id" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="transaction_id">ID de transaction:</label>
+                    <input type="text" id="transaction_id" name="transaction_id" value="PAYPAL-TEST-123" required>
+                </div>
+                <div class="form-group">
+                    <label for="amount">Montant:</label>
+                    <input type="number" id="amount" name="amount" value="100" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="currency">Devise:</label>
+                    <select id="currency" name="currency" required>
+                        <option value="MAD">MAD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="status">Statut:</label>
+                    <select id="status" name="status" required>
+                        <option value="pending">En attente</option>
+                        <option value="completed" selected>Complété</option>
+                        <option value="failed">Échoué</option>
+                    </select>
+                </div>
+                <button type="submit">Tester la Sauvegarde</button>
+                <button type="button" class="secondary" onclick="clearForm()">Réinitialiser</button>
+            </form>
+            <div class="response-wrapper">
+                <div class="response" id="payment-response"></div>
+                <div class="raw-response" id="payment-raw"></div>
+                <button type="button" class="show-raw" onclick="toggleRaw('payment')">Afficher/Masquer Réponse Brute</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Fonction pour vérifier si un élément existe
+        function getElement(id) {
+            const element = document.getElementById(id);
+            if (!element) {
+                console.error(`Élément non trouvé: ${id}`);
+                return null;
+            }
+            return element;
+        }
+
+        // Fonction pour basculer l'affichage de la réponse brute
+        function toggleRaw(prefix) {
+            const rawElement = getElement(`${prefix}-raw`);
+            if (rawElement) {
+                rawElement.style.display = rawElement.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Fonction pour formater le JSON
+        function formatJSON(obj) {
+            try {
+                return JSON.stringify(obj, null, 2);
+            } catch (e) {
+                return String(obj);
+            }
+        }
+
+        // Fonction pour afficher les réponses
+        async function displayResponse(elementId, response, isError = false) {
+            const element = getElement(elementId);
+            const rawElement = getElement(`${elementId}-raw`);
+            
+            if (!element || !rawElement) {
+                return false;
+            }
+
+            try {
+                let rawText;
+                let jsonData;
+
+                // Si c'est déjà un objet (cas d'erreur)
+                if (response && typeof response === 'object' && !(response instanceof Response)) {
+                    rawText = formatJSON(response);
+                    jsonData = response;
+                }
+                // Si c'est une réponse fetch
+                else if (response instanceof Response) {
+                    const clonedResponse = response.clone();
+                    try {
+                        rawText = await clonedResponse.text();
+                        jsonData = await response.json();
+                    } catch (e) {
+                        console.error('Erreur lors de la lecture de la réponse:', e);
+                        rawText = await response.text();
+                        jsonData = { error: 'Réponse non-JSON', content: rawText };
+                        isError = true;
+                    }
+                }
+                // Autres cas
+                else {
+                    rawText = String(response);
+                    try {
+                        jsonData = JSON.parse(rawText);
+                    } catch (e) {
+                        jsonData = { error: 'Données non-JSON', content: rawText };
+                        isError = true;
+                    }
+                }
+
+                // Affiche la réponse brute
+                rawElement.textContent = rawText;
+                rawElement.style.display = 'none';
+                
+                // Affiche la version formatée
+                element.textContent = formatJSON(jsonData);
+                element.style.display = 'block';
+                element.className = `response ${isError ? 'error' : 'success'}`;
+
+                return !isError;
+            } catch (e) {
+                console.error('Erreur dans displayResponse:', e);
+                if (element) {
+                    element.style.display = 'block';
+                    element.className = 'response error';
+                    element.textContent = `Erreur: ${e.message}`;
+                }
+                if (rawElement) {
+                    rawElement.style.display = 'none';
+                    rawElement.textContent = e.stack;
+                }
+                return false;
+            }
+        }
+
+        // Test PHP de base
+        async function testPhp() {
+            try {
+                const response = await fetch('test_basic.php');
+                await displayResponse('php-response', response);
+            } catch (error) {
+                console.error('Erreur lors du test PHP:', error);
+                await displayResponse('php-response', {
+                    success: false,
+                    error: error.message,
+                    hint: "Le serveur ne retourne pas du JSON valide"
+                }, true);
+            }
+        }
+
+        // Test de la base de données
+        async function testDatabase() {
+            try {
+                const response = await fetch('test_db.php');
+                await displayResponse('db-response', response);
+            } catch (error) {
+                console.error('Erreur lors du test BDD:', error);
+                await displayResponse('db-response', {
+                    success: false,
+                    error: error.message,
+                    hint: "Erreur lors du test de la base de données"
+                }, true);
+            }
+        }
+
+        // Test de la structure de la base de données
+        async function testDbStructure() {
+            try {
+                const response = await fetch('test_db_structure.php');
+                await displayResponse('db-response', response);
+            } catch (error) {
+                console.error('Erreur lors du test de structure:', error);
+                await displayResponse('db-response', {
+                    success: false,
+                    error: error.message,
+                    hint: "Erreur lors de la vérification de la structure"
+                }, true);
+            }
+        }
+
+        // Test de paiement
+        document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            
+            try {
+                // Convertit FormData en objet pour validation
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
+                
+                // Validation côté client
+                if (parseFloat(data.amount) <= 0) {
+                    throw new Error('Le montant doit être supérieur à 0');
+                }
+
+                // Envoi des données
+                const response = await fetch('test_save_payment.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Affiche la réponse
+                const isValid = await displayResponse('payment-response', response);
+                
+                if (!isValid) {
+                    throw new Error('Réponse invalide du serveur');
+                }
+            } catch (error) {
+                console.error('Erreur lors du test de paiement:', error);
+                await displayResponse('payment-response', {
+                    success: false,
+                    error: error.message,
+                    hint: "Erreur lors du test de sauvegarde"
+                }, true);
+            }
+        });
+
+        // Réinitialisation du formulaire
+        function clearForm() {
+            const form = getElement('paymentForm');
+            if (form) {
+                form.reset();
+            }
+            
+            ['payment-response', 'payment-raw'].forEach(id => {
+                const element = getElement(id);
+                if (element) {
+                    element.style.display = 'none';
+                    element.textContent = '';
+                }
+            });
+        }
+    </script>
+</body>
+</html> 
