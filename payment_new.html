@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paiement PayPal - TicketFoot</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .payment-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            padding: 2rem;
+            max-width: 500px;
+            width: 100%;
+            margin: 2rem auto;
+        }
+        .payment-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .payment-info {
+            margin-bottom: 2rem;
+        }
+        .payment-amount {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            color: #198754;
+            margin: 1rem 0;
+        }
+        .payment-status {
+            text-align: center;
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 5px;
+        }
+        .status-processing {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .payment-footer {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="payment-container">
+            <div class="payment-header">
+                <h2>Paiement sécurisé</h2>
+                <p class="text-muted">Commande #<span id="order-id"></span></p>
+            </div>
+
+            <div class="payment-info">
+                <div class="payment-amount">
+                    <span id="amount-display"></span>
+                </div>
+                <div class="text-center mb-3">
+                    <small class="text-muted">Paiement sécurisé via PayPal</small>
+                </div>
+            </div>
+
+            <div id="status-processing" class="payment-status status-processing d-none">
+                <i class="bi bi-hourglass-split"></i> Traitement du paiement en cours...
+            </div>
+
+            <div id="status-success" class="payment-status status-success d-none">
+                <i class="bi bi-check-circle"></i> Paiement effectué avec succès!
+            </div>
+
+            <div id="status-error" class="payment-status status-error d-none">
+                <i class="bi bi-exclamation-circle"></i> <span id="error-message"></span>
+            </div>
+
+            <div id="paypal-button-container"></div>
+
+            <div class="payment-footer">
+                <p><i class="bi bi-shield-check"></i> Transaction sécurisée</p>
+                <p><small>Vos informations de paiement sont protégées</small></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('order_id');
+        const amount = parseFloat(urlParams.get('amount'));
+
+        // Update display
+        document.getElementById('order-id').textContent = orderId;
+        document.getElementById('amount-display').textContent = `${amount.toFixed(2)} EUR`;
+
+        // PayPal configuration
+        const paypalConfig = {
+            clientId: 'AV5aJZBd9Td8kh3eRla5My1LjUPZBNfkiu3QOHDKzb2iFQiDfK1UTQ6X2FFntD7LAZHWcK90NaGhA8Kn',
+            currency: 'EUR'
+        };
+
+        // Load PayPal SDK
+        const script = document.createElement('script');
+        script.src = `https://www.paypal.com/sdk/js?client-id=${paypalConfig.clientId}&currency=${paypalConfig.currency}`;
+        script.async = true;
+
+        script.onload = () => {
+            paypal.Buttons({
+                createOrder: (data, actions) => {
+                    document.getElementById('status-processing').classList.remove('d-none');
+                    
+                    return actions.order.create({
+                        purchase_units: [{
+                            amount: {
+                                value: amount.toFixed(2),
+                                currency_code: paypalConfig.currency
+                            },
+                            description: `Commande #${orderId}`
+                        }]
+                    });
+                },
+
+                onApprove: async (data, actions) => {
+                    try {
+                        const order = await actions.order.capture();
+                        console.log('Payment approved:', order);
+
+                        // Send payment data to our backend
+                        const response = await fetch('process_payment_success_new.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                paypal_transaction_id: order.id,
+                                order_id: orderId
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            document.getElementById('status-processing').classList.add('d-none');
+                            document.getElementById('status-success').classList.remove('d-none');
+
+                            // Redirect to success page after 2 seconds
+                            setTimeout(() => {
+                                window.location.href = `payment_success.php?order_id=${orderId}`;
+                            }, 2000);
+                        } else {
+                            throw new Error(result.error || 'Erreur lors du traitement du paiement');
+                        }
+
+                    } catch (error) {
+                        console.error('Payment error:', error);
+                        document.getElementById('status-processing').classList.add('d-none');
+                        document.getElementById('status-error').classList.remove('d-none');
+                        document.getElementById('error-message').textContent = error.message;
+                    }
+                },
+
+                onError: (err) => {
+                    console.error('PayPal error:', err);
+                    document.getElementById('status-processing').classList.add('d-none');
+                    document.getElementById('status-error').classList.remove('d-none');
+                    document.getElementById('error-message').textContent = 'Erreur lors du paiement PayPal';
+                },
+
+                onCancel: () => {
+                    document.getElementById('status-processing').classList.add('d-none');
+                }
+            }).render('#paypal-button-container');
+        };
+
+        document.body.appendChild(script);
+    </script>
+</body>
+</html> 
